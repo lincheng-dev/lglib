@@ -9,7 +9,7 @@ import matplotlib.pyplot as pyplot
 minFloat = numpy.finfo(float).eps
 class MappingBase(object):
     # Base for smooth mapping from gaussian to non-gaussian
-    def __init__(self, rf=0., b2=0., b3=0., s1=0., s2=1., nc=1.):
+    def __init__(self, rf=-0.05, b2=0., b3=0., s1=0.01, s2=0.1, nc=1.):
         self.rf = rf
         self.b2 = b2
         self.b3 = b3
@@ -19,6 +19,7 @@ class MappingBase(object):
         self._validate()
     
     def _validate(self):
+        assert self.rf <= self.s1, "rate floor should be smaller than switch left"
         assert self.s1 <= self.s2, "switch left should be smaller than switch right"
         assert self.s2 <= self.nc, "switch right should be smaller than normal cutoff"
     
@@ -26,23 +27,26 @@ class MappingBase(object):
         return [self.MapOnePoint(x) for x in xlist]
     
     def MapOnePoint(self, x):
-        raise NotImplementedError      
+        raise NotImplementedError    
+        
+    def MapDerivOnePoint(self, x):
+        raise NotImplementedError  
     
-    def MapStdGaussianSample(self, size, plotsample=False):
+    def MapGaussianSample(self, mean=0., stdev=1.0, size=10000, plotsample=False, binsize=100):
         assert size>0, "number of sample should be positive"
-        xlist = numpy.random.normal(0., 1., size)
+        xlist = numpy.random.normal(mean, stdev, size)
         slist = self.Map(xlist)
         if plotsample:
             f, (ax1, ax2) = pyplot.subplots(1, 2)
             ax1.scatter(xlist, slist)
-            ax2.hist(xlist, size/100)
-            ax2.hist(slist, size/100)  
+            ax2.hist(xlist, size/binsize)
+            ax2.hist(slist, size/binsize)  
             f.show()    
         return slist  
     
 class Mapping3B(MappingBase):
     # 3B mapping     
-    def __init__(self, rf=0.0, b2=0., b3=0., s1=0.01, s2=0.1, nc=1.):
+    def __init__(self, rf=-0.05, b2=0., b3=0., s1=0.01, s2=0.1, nc=1.):
         super(Mapping3B, self).__init__(rf,b2,b3,s1,s2,nc)
         self.c  = (s1+s2)/2.
         self.x1 = self.s1-self.c if abs(self.b2)<minFloat else log(2.*self.b2*(self.s1-self.c)+1.)/2./self.b2
@@ -65,16 +69,16 @@ class Mapping3B(MappingBase):
             
 class Mapping5B(Mapping3B):
     # 5B mapping     
-    def __init__(self, rf=0., b2=0., b3=0., s1=0., s2=1., nc=1.):
+    def __init__(self, rf=-0.05, b2=0., b3=0., s1=0.01, s2=0.1, nc=1.):
         super(Mapping5B, self).__init__(rf,b2,b3,s1,s2,nc)
         self.nc0 = max(self.rf/2., rf+0.0005)
         self.nc2 = 2*self.nc-self.s2
         self.b4  = -self.b3
         self.x0  = (self.nc0-self.s1)/self.d1+self.x1 if abs(self.b1)<minFloat else log(2.*self.b1*(self.nc0-self.s1)/self.d1+1)/2./self.b1+self.x1
-        self.d0  = self.d1*exp(2.*self.b1*(self.nc0-self.x1))
+        self.d0  = self.d1*exp(2.*self.b1*(self.x0-self.x1))
         self.x3  = (self.nc-self.s2)/self.d2+self.x2 if abs(self.b3)<minFloat else log(2.*self.b3*(self.nc-self.s2)/self.d2+1)/2./self.b3+self.x2
         self.x4  = (self.nc2-self.nc)/self.d3+self.x3 if abs(self.b4)<minFloat else log(2.*self.b4*(self.nc2-self.nc)/self.d3+1)/2./self.b4+self.x3
-        self.d4  = self.d3*exp(2.*self.b4*(self.nc2-self.nc))     
+        self.d4  = self.d3*exp(2.*self.b4*(self.x4-self.x3))     
         print self.nc0, self.nc, self.nc2
         print self.b1, self.b2, self.b3, self.b4
         print self.x0, self.x1, self.x2, self.x3, self.x4
