@@ -97,20 +97,39 @@ def get_fund_price_data_163(ticker='150008', start=datetime.date(2016,1,1), end=
         num_page = int(num_list[-2])
     
     def fmt163(tr):
-        tdlist = [td for td in tr.xpath('td')]
-        pxdate = datetime.datetime(*(time.strptime(tdlist[0].text.strip(), "%Y-%m-%d")[0:6])),
-        px     = float(tdlist[1].text.strip())
-        pxchg  = float(tdlist[2].xpath('span')[0].text.strip('%').replace('--','0'))/100.
-        volstr = tdlist[3].text.strip()
-        check  = u'\u4e07' not in volstr
-        volstp = volstr.replace(u'\u4e07', '')
-        volume = float(volstr.replace(',','')) if check else 10000.*float(volstp.replace(',',''))
-        amtstr = tdlist[4].text.strip()
-        check  = u'\u4e07' not in amtstr
-        amtstp = amtstr.replace(u'\u4e07', '')
-        amount = float(amtstr.replace(',','')) if check else 10000.*float(amtstp.replace(',',''))
-        pctchg = float(tdlist[5].text.strip('%').replace('--','0'))/100.
-        ovund  = float(tdlist[6].xpath('span')[0].text.strip('%').replace('--','0'))/100.
+        tdlist    = [td for td in tr.xpath('td')]
+        # Date
+        pxdate    = datetime.datetime(*(time.strptime(tdlist[0].text.strip(), "%Y-%m-%d")[0:6])),
+        # UnitPrice
+        px        = float(tdlist[1].text.strip())
+        # PriceChange
+        pxchg     = float(tdlist[2].xpath('span')[0].text.strip('%').replace('--','0').replace(',',''))/100.
+        # Volumn
+        volstr    = tdlist[3].text.strip().replace('--','0').replace(',','')
+        check10k  = u'\u4e07' in volstr
+        check100m = u'\u4ebf' in volstr
+        volstp    = volstr.replace(u'\u4e07', '').replace(u'\u4ebf', '')
+        if check10k:
+            volume = 10000.*float(volstp)
+        elif check100m:
+            volume = 100000000.*float(volstp)
+        else:
+            volume = float(volstr)
+        # Amount
+        amtstr    = tdlist[4].text.strip().replace('--','0').replace(',','')
+        check10k  = u'\u4e07' in amtstr
+        check100m = u'\u4ebf' in amtstr
+        amtstp = amtstr.replace(u'\u4e07', '').replace(u'\u4ebf', '')
+        if check10k:
+            amount = 10000.*float(amtstp)
+        elif check100m:
+            amount = 100000000.*float(amtstp)
+        else:
+            amount = float(amtstp)
+        # Percentage change
+        pctchg = float(tdlist[5].text.strip('%').replace('--','0').replace(',',''))/100.
+        # Over/Under price
+        ovund  = float(tdlist[6].xpath('span')[0].text.strip('%').replace('--','0').replace(',',''))/100.
         return [pxdate, px, pxchg, volume, amount, pctchg, ovund]
                  
     td_content = []
