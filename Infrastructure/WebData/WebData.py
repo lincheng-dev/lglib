@@ -5,15 +5,8 @@ import sys
 import urllib, urllib2
 import requests
 import datetime, time
-import signal
 from pandas import DataFrame
 from lxml import etree
-
-# for web scraping with Qt
-import PySide
-from PySide.QtCore import QUrl
-from PySide.QtGui import QApplication
-from PySide.QtWebKit import QWebPage
 
 # historical url
 _HISTORICAL_HEXUN_URL  = 'http://data.funds.hexun.com/outxml/detail/openfundnetvalue.aspx?'
@@ -35,13 +28,16 @@ def get_fund_quote_est_em(ticker='161121'):
     esttime  = datetime.datetime(*(time.strptime(esttmstr[0].text, "(%y-%m-%d %H:%M)")[0:6]))
     return (esttime, estval)
 
-# retrieve fund historical price from netease
-def get_fund_price_data_163(ticker='150008', start=datetime.date(2016,1,1), end=datetime.date(2016,6,1)):
+# retrieve fund historical value from netease
+def get_fund_value_data_163(ticker='150008', start=datetime.date(2016,1,1), end=datetime.date(2016,6,1), asc=False):
     url  = _HISTORICAL_163_URL
-    url += "zyjl_" + ticker + ".html?"
+    url += "jzzs_" + ticker + ".html?"
     url += "start=" + start.strftime("%Y-%m-%d")
     url += "&end=" + end.strftime("%Y-%m-%d")
-    url += "&sort=TDATE&order=asc"
+    if asc:
+        url += "&sort=TDATE&order=asc"
+    else:
+        url += "&sort=TDATE&order=desc"
     print url
     
     web        = urllib.urlopen(url)
@@ -56,7 +52,52 @@ def get_fund_price_data_163(ticker='150008', start=datetime.date(2016,1,1), end=
     
     def fmt163(tr):
         tdlist = [td for td in tr.xpath('td')]
-        print tdlist
+        pxdate = datetime.datetime(*(time.strptime(tdlist[0].text.strip(), "%Y-%m-%d")[0:6])),
+        px     = float(tdlist[1].text.strip())
+        pxaccu = float(tdlist[2].text.strip())
+        pxchg  = float(tdlist[3].xpath('span')[0].text.strip('%').replace('--','0'))/100.
+        return [pxdate, px, pxaccu, pxchg]
+                 
+    td_content = []
+    for i in xrange(num_page):
+        suburl  = url.replace(ticker, ticker+'_'+str(i))
+        print "processing " + suburl
+        web     = urllib.urlopen(suburl)
+        s       = web.read()
+        html    = etree.HTML(s)
+        nodes   = html.xpath('//div[@id="fn_fund_value_trend"]/table/tbody/tr')
+        tdtable = [fmt163(tr) for tr in nodes]
+        td_content += tdtable
+    
+    header = ['Date', 'UnitValue', 'AccuValue', 'ValueChange']
+    df     = DataFrame(data=td_content, columns=header)
+    df     = df.set_index(['Date'])
+    return df
+    
+# retrieve fund historical price from netease
+def get_fund_price_data_163(ticker='150008', start=datetime.date(2016,1,1), end=datetime.date(2016,6,1), asc=False):
+    url  = _HISTORICAL_163_URL
+    url += "zyjl_" + ticker + ".html?"
+    url += "start=" + start.strftime("%Y-%m-%d")
+    url += "&end=" + end.strftime("%Y-%m-%d")
+    if asc:
+        url += "&sort=TDATE&order=asc"
+    else:
+        url += "&sort=TDATE&order=desc"
+    print url
+    
+    web        = urllib.urlopen(url)
+    s          = web.read()
+    html       = etree.HTML(s)
+    num_nodes  = html.xpath('//div[@class="mod_pages"]/a')
+    num_list   = [node.text for node in num_nodes]
+    num_page   = 1
+    if len(num_list) > 0:
+        assert num_list[-1] == u'\u4e0b\u4e00\u9875', "last page should be next page"
+        num_page = int(num_list[-2])
+    
+    def fmt163(tr):
+        tdlist = [td for td in tr.xpath('td')]
         pxdate = datetime.datetime(*(time.strptime(tdlist[0].text.strip(), "%Y-%m-%d")[0:6])),
         px     = float(tdlist[1].text.strip())
         pxchg  = float(tdlist[2].xpath('span')[0].text.strip('%').replace('--','0'))/100.
