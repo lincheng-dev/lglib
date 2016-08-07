@@ -18,9 +18,10 @@ from PySide.QtWebKit import QWebPage
 # historical url
 _HISTORICAL_HEXUN_URL  = 'http://data.funds.hexun.com/outxml/detail/openfundnetvalue.aspx?'
 _HISTORICAL_GOOGLE_URL = 'http://www.google.com/finance/historical?'
+_HISTORICAL_163_URL    = 'http://quotes.money.163.com/fund/'
 
 # retrieve fund est value from eastmoney
-def get_fund_value_est_em(ticker='161121'):
+def get_fund_quote_est_em(ticker='161121'):
     # need to validate fund
     # looks quite slow
     url      = 'http://fund.eastmoney.com/'+ticker+'.html'
@@ -34,32 +35,60 @@ def get_fund_value_est_em(ticker='161121'):
     esttime  = datetime.datetime(*(time.strptime(esttmstr[0].text, "(%y-%m-%d %H:%M)")[0:6]))
     return (esttime, estval)
 
-class WebParser(QWebPage):
-    # get html after execution
-    # need more tests here
-    # the JS code is as below, can we directly execute?
-    # <script type="text/javascript">
-    #         LoadFundSelect("jjlist", "jjjz");
-    #         ChkSelectItem("jjlist", "161121");
-    #         var params = { code: strbzdm, pindex: 1, pernum: 20, startDate:"",endDate:"" };
-    #         LoadLsjz(params);
-    # </script>
-    def __init__(self, url, filename):
-        self._file = filename
-        self.app = QApplication.instance()
-        QWebPage.__init__(self)
-        self.loadFinished.connect(self._loadFinished)
-        self.mainFrame().load(QUrl(url))
-        self.app.exec_()
-            
-    def _loadFinished(self, result):
-        self.frame = self.mainFrame()
-        filehandle = open(self._file, 'w')
-        filehandle.write(self.mainFrame().toHtml().encode('UTF-8'))
-        filehandle.close()
-        self.app.quit() 
-
-# retrieve fund historical data from hexun
+# retrieve fund historical price from netease
+def get_fund_price_data_163(ticker='150008', start=datetime.date(2016,1,1), end=datetime.date(2016,6,1)):
+    url  = _HISTORICAL_163_URL
+    url += "zyjl_" + ticker + ".html?"
+    url += "start=" + start.strftime("%Y-%m-%d")
+    url += "&end=" + end.strftime("%Y-%m-%d")
+    url += "&sort=TDATE&order=asc"
+    print url
+    
+    web        = urllib.urlopen(url)
+    s          = web.read()
+    html       = etree.HTML(s)
+    num_nodes  = html.xpath('//div[@class="mod_pages"]/a')
+    num_list   = [node.text for node in num_nodes]
+    num_page   = 1
+    if len(num_list) > 0:
+        assert num_list[-1] == u'\u4e0b\u4e00\u9875', "last page should be next page"
+        num_page = int(num_list[-2])
+    
+    def fmt163(tr):
+        tdlist = [td for td in tr.xpath('td')]
+        print tdlist
+        pxdate = datetime.datetime(*(time.strptime(tdlist[0].text.strip(), "%Y-%m-%d")[0:6])),
+        px     = float(tdlist[1].text.strip())
+        pxchg  = float(tdlist[2].xpath('span')[0].text.strip('%').replace('--','0'))/100.
+        volstr = tdlist[3].text.strip()
+        check  = u'\u4e07' not in volstr
+        volstp = volstr.replace(u'\u4e07', '')
+        volume = float(volstr.replace(',','')) if check else 10000.*float(volstp.replace(',',''))
+        amtstr = tdlist[4].text.strip()
+        check  = u'\u4e07' not in amtstr
+        amtstp = amtstr.replace(u'\u4e07', '')
+        amount = float(amtstr.replace(',','')) if check else 10000.*float(amtstp.replace(',',''))
+        pctchg = float(tdlist[5].text.strip('%').replace('--','0'))/100.
+        ovund  = float(tdlist[6].xpath('span')[0].text.strip('%').replace('--','0'))/100.
+        return [pxdate, px, pxchg, volume, amount, pctchg, ovund]
+                 
+    td_content = []
+    for i in xrange(num_page):
+        suburl  = url.replace(ticker, ticker+'_'+str(i))
+        print "processing " + suburl
+        web     = urllib.urlopen(suburl)
+        s       = web.read()
+        html    = etree.HTML(s)
+        nodes   = html.xpath('//div[@id="fn_fund_value_trend"]/table/tbody/tr')
+        tdtable = [fmt163(tr) for tr in nodes]
+        td_content += tdtable
+    
+    header = ['Date', 'Close', 'PriceChange', 'Volumn', 'Amount', 'TurnOver', 'Discount']
+    df     = DataFrame(data=td_content, columns=header)
+    df     = df.set_index(['Date'])
+    return df
+    
+# retrieve fund historical net value from hexun
 def get_fund_value_data_hx(ticker='161121', start=datetime.date(2016,1,1), end=datetime.date(2016,6,1)):
     url  = _HISTORICAL_HEXUN_URL
     url += "fundcode=" + ticker
