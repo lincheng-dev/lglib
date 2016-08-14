@@ -31,7 +31,7 @@ class ABFundPos(object):
         self.startDate          = kwargs['StartDate']
         self.endDate            = datetime.date(9999, 12, 31)
         self.lastDate           = self.startDate
-        self.minUnwindDate      = (self.startDate + BDay(3)).to_datetime()
+        self.evolveCounter      = 0
         # flags
         self.unwinded           = False
         self.upfolded           = False
@@ -50,7 +50,8 @@ class ABFundPos(object):
     def getArbMargin(Ticker):
         raise NotImplementedError
 
-    def validate(self, px):
+    @staticmethod
+    def validate(px):
         # always need BValue to check whether it is in normal status
         validvalue = px['AValue'] > 0.01 and px['BValue'] > 0.01 and px['FundValue'] > 0.01
         validprice = px['APrice'] > 0.01 and px['BPrice'] > 0.01 and px['FundPrice'] > 0.01
@@ -97,24 +98,35 @@ class ABMergePos(ABFundPos):
         super(ABMergePos, self).__init__(*args, **kwargs)
     
     @staticmethod
-    def getArbMargin(Ticker):
-        # not exchange trade, buy AB at rate, sell with redemption
+    def getArbMargin(Ticker, px, wt):
+        if not ABFundPos.validate(px):
+            return 0.0
+            
+        apx = px['APrice']
+        bpx = px['BPrice']  
+        buyFee  = 0.
+        sellFee = 0. 
+        fval    = 0.     
         if NotExchFund(Ticker):
             buyFee  = TransactionFee.TxFeeFundExchTrade().getTxFeeRate()
             sellFee = TransactionFee.TxFeeFundRedemp().getTxFeeRate()
-            return buyFee + sellFee
+            fval    = px['FundValue']
         else:
             buyFee  = TransactionFee.TxFeeFundExchTrade().getTxFeeRate()
             sellFee = buyFee
-            return buyFee + sellFee
+            fval    = px['FundPrice']
+        margin = fval / (apx * wt['AWeight'] + bpx * wt['BWeight']) - 1. - buyFee - sellFee
+        return max([margin, 0.0])
     
     def setupAllocAmount(self, cashAmount):
         if self.notExchTraded:
             self.buyFeeRate  = TransactionFee.TxFeeFundExchTrade().getTxFeeRate()
             self.sellFeeRate = TransactionFee.TxFeeFundRedemp().getTxFeeRate()
+            self.unwindRate  = self.buyFeeRate 
         else:
             self.buyFeeRate  = TransactionFee.TxFeeFundExchTrade().getTxFeeRate()
             self.sellFeeRate = self.buyFeeRate            
+            self.unwindRate  = self.buyFeeRate 
         
         unitapx        = self.unitshare * self.weight['AWeight'] * self.sttpx['APrice']
         unitbpx        = self.unitshare * self.weight['BWeight'] * self.sttpx['BPrice']
@@ -124,9 +136,9 @@ class ABMergePos(ABFundPos):
         self.sttCost   = unitpxwfee * nbunits
         self.sttFee    = (unitpxwfee - unitpx) * nbunits
         nbshare        = nbunits * self.unitshare
-        self.sttPos    = {'Fund': 0, 'A': self.weight['AWeight'] * nbshare, 'B': self.weight['BWeight'] * nbshare}
+        self.sttPos    = {'Fund': 0., 'A': self.weight['AWeight'] * nbshare, 'B': self.weight['BWeight'] * nbshare}
         self.lastPos   = dict(self.sttPos)
-        self.lastMTM   = (self.sttCost - self.sttFee) * (1 - self.sellFeeRate)
+        self.lastMTM   = (self.sttCost - self.sttFee) * (1 - self.unwindRate)
         self.isAlloced = True
         # return the cash flow
         return self.sttCost
@@ -134,41 +146,26 @@ class ABMergePos(ABFundPos):
     def evolve(self, date, px):
         if not self.isAlloced:
             raise "No cash alloced, need to call setupAllocAmount to init"
-        if date < self.lastDate:
+        if date <= self.lastDate:
             raise "Should not evolve to past date %s while evolve date is %s" % (date.strftime("%Y%m%d"), self.lastDate.strftime("%Y%m%d"))
         if self.unwinded:
             return (0., 0.) # only return zero MTM/Cashflow, do nothing
         if self.validate(px):
-            if px['BValue'] - self.lastpx['BValue'] > 0.2:
-                # downfold happened
-                if self.downfolded or self.upfolded:
-                    raise "ticker %s, pos stt %s, date %s, multiple fold happen" % ('/'.join(self.Ticker), self.startDate.strftime("%Y%m%d"), date.strftime("%Y%m%d")) 
-                self.downfolded = True
-                ashare          = self.sttPos['A']
-                bshare          = self.sttPos['B']
-                fshare          = ashare * abs(self.lastpx['AValue'] - self.lastpx['BValue'])
-                self.lastPos = {'Fund': fshare, 'A': ashare * self.lastpx['BValue'], 'B': bshare * self.lastpx['BValue']}
-            if px['BValue'] - self.lastpx['BValue'] < -0.2:
-                # upfold happened
-                if self.downfolded or self.upfolded:
-                    raise "ticker %s, pos stt %s, date %s, multiple fold happen" % ('/'.join(self.Ticker), self.startDate.strftime("%Y%m%d"), date.strftime("%Y%m%d")) 
-                self.upfolded   = True
-                ashare          = self.sttPos['A']
-                bshare          = self.sttPos['B']
-                fshare          = ashare * self.lastpx['AValue'] + bshare * self.lastpx['BValue'] - ashare - bshare
-                self.lastPos = {'Fund': fshare, 'A': ashare, 'B': bshare}
+            self.evolveCounter += 1
+            # roll to base at T+1, suppose when we buy A and B at T, there is no change to up/down fold
+            if self.evolveCounter == 1:
+                self.lastPos = {'Fund': self.sttPos['A']+self.sttPos['B'], 'A': 0., 'B': 0.}
             
             self.lastpx   = dict(px)
             self.lastDate = date
-            if date >= self.minUnwindDate:
+            fval          = px['FundValue'] if self.notExchTraded else px['FundPrice']
+            self.lastMTM  = self.lastPos['Fund'] * fval * (1 - self.sellFeeRate) + (self.lastPos['A'] * px['APrice'] + self.lastPos['B'] * px['BPrice']) * (1 - self.unwindRate)
+            # T+2 we will be able to unwind the position
+            if self.evolveCounter >= 2:
                 self.unwinded = True
                 self.endDate  = date
-                fval          = px['FundValue'] if self.notExchTraded else px['FundPrice']
-                self.lastMTM  = (self.lastPos['Fund'] + self.lastPos['A'] + self.lastPos['B']) * fval * (1 - self.sellFeeRate)
                 return (0., self.lastMTM)
             else:
-                fval          = px['FundValue'] if self.notExchTraded else px['FundPrice']
-                self.lastMTM  = self.lastPos['Fund'] * fval * (1 - self.sellFeeRate) + (self.lastPos['A'] * px['APrice'] + self.lastPos['B'] * px['BPrice']) * (1 - self.buyFeeRate)
                 return (self.lastMTM, 0.)  
         else:
             return (self.lastMTM, 0.)
@@ -181,97 +178,105 @@ class ABMergePos(ABFundPos):
         return super(ABMergePos, self).getSummary()
         
 class FundSplitPos():
-    def __init__(self, ticker, date, cashalloc, aweight, bweight, px, apx, bpx, feedict=FUND_TXFEE_DICT):
-        # constant facts
-        self.ticker   = ticker
-        self.aw       = aweight
-        self.bw       = bweight
-        self.fdict    = feedict
-        self.sttpx    = px
-        self.sttapx   = apx
-        self.sttbpx   = bpx
-        self.sttdate  = date
-        self.unwdate  = (date + BDay(3)).to_datetime()
-        
-        # update variables
-        self.lastpx   = px
-        self.lastapx  = apx
-        self.lastbpx  = bpx
-        self.lastdate = date
-        self.unwind   = False
-        self.dfold    = False
-        self.ufold    = False
-        
-        # number of contract, suppose we buy multiple of 1000
-        unit          = 1000
-        unitpx        = unit * (1. + feedict['FUNDBUY']) * px
-        nbunitlots    = floor(cashalloc / unitpx)
-        self.nblots   = unit * nbunitlots
-        self.buylots  = self.nblots
-        self.buycash  = nbunitlots * unitpx
-        self.buycost  = nbunitlots * unit * feedict['FUNDBUY'] * px
-        self.splcost  = self.nblots * self.fdict['SPLIT']
-        self.sellcost = self.nblots * self.px * self.fdict['FUNDSELL']
-        self.sellcash = self.nblots * self.px * (1. - self.fdict['FUNDSELL']) - self.mcost
-        self.estpnl   = self.sellcash - self.buycash
     
-    def getTicker(self):
-        return ticker
-        
-    def getSetupCost(self):
-        return self.buycash
+    def __init__(self, *args, **kwargs):
+        # basic fact
+        super(ABMergePos, self).__init__(*args, **kwargs)
     
-    def evolve(self, date, px, apx, bpx):
-        if date < self.lastday:
-            raise 'should not evolve to past date'
-        if self.unwind:
-            return 0. # only return zero MTM, do nothing
-        if px > 0.01 and apx > 0.01 and bpx > 0.01:
+    @staticmethod
+    def getArbMargin(Ticker, px, wt):
+        if not ABFundPos.validate(px):
+            return 0.0
             
-            # check whether fold happens or not, amend nblots accordingly
-            if bpx - self.lastbpx > 0.2:
-                # suppose downfold happens
-                self.dfold  = True
-                # just an approximation coz price is different from value
-                newlots     = self.lastbpx * self.nblots * self.bw + self.lastapx * self.nblots * self.aw
-                newmcost    = self.lastbpx * self.mcost
-                self.nblots = newlots
-                self.mcost  = newmcost
-            if bpx - self.lastbpx < -0.2:
-                # suppose upflod happens
-                self.ufold  = True
-                # just an approximation coz price is different from value
-                newlots     = self.lastbpx * self.nblots * self.bw + self.lastapx * self.nblots * self.aw
-                self.nblots = newlots
-                
-            if date >= self.unwdate:
-                self.unwind   = True # position finished no need to continue
-                self.estscost = self.px * self.nblots * self.fdict['FUNDSELL']
-                    
-            if self.dfold and self.ufold:
-                raise 'down fold and up fold both happen for %s at %s' %(str(self.ticker), date.strftime('%Y%m%d'))
-            
-            # prepare for MTM
-            self.lastpx   = px
-            self.lastapx  = apx
-            self.lastbpx  = bpx
-            self.lastday  = date
-            
-        self.sellcost = self.nblots * self.lastpx * self.fdict['FUNDSELL']
-        self.sellcash = self.nblots * self.lastpx * (1. - self.fdict['FUNDSELL']) - self.mcost
-        if self.unwind:
-            # no MTM, with cash
-            return (0., self.sellcash)
+        apx = px['APrice']
+        bpx = px['BPrice']  
+        buyFee  = 0.
+        sellFee = 0. 
+        fval    = 0.     
+        if NotExchFund(Ticker):
+            buyFee  = TransactionFee.TxFeeFundSub().getTxFeeRate()
+            sellFee = TransactionFee.TxFeeFundExchTrade().getTxFeeRate()
+            fval    = px['FundValue']
         else:
-            # only MTM
-            return (self.sellcash, 0.)
-   
+            buyFee  = TransactionFee.TxFeeFundExchTrade().getTxFeeRate()
+            sellFee = buyFee
+            fval    = px['FundPrice']
+        margin = (apx * wt['AWeight'] + bpx * wt['BWeight']) / fval - 1. - buyFee - sellFee
+        return max([margin, 0.0])
+    
+    def setupAllocAmount(self, cashAmount):
+        unitpx = 0.0
+        if self.notExchTraded:
+            self.buyFeeRate  = TransactionFee.TxFeeFundSub().getTxFeeRate()
+            self.sellFeeRate = TransactionFee.TxFeeFundExchTrade().getTxFeeRate()
+            self.unwindRate  = TransactionFee.TxFeeFundRedemp().getTxFeeRate()
+            unitpx           = self.unitshare * self.sttpx['FundValue']
+        else:
+            self.buyFeeRate  = TransactionFee.TxFeeFundExchTrade().getTxFeeRate()
+            self.sellFeeRate = self.buyFeeRate 
+            self.unwindRate  = self.buyFeeRate 
+            unitpx           = self.unitshare * self.sttpx['FundPrice']
+        
+        unitpxwfee     = unitpx * (1 + self.buyFeeRate)
+        nbunits        = floor(cashAmount / unitpxwfee)
+        self.sttCost   = unitpxwfee * nbunits
+        self.sttFee    = (unitpxwfee - unitpx) * nbunits
+        nbshare        = nbunits * self.unitshare
+        self.sttPos    = {'Fund': nbshare, 'A': 0., 'B': 0.}
+        self.lastPos   = dict(self.sttPos)
+        self.lastMTM   = (self.sttCost - self.sttFee) * (1 - self.unwindRate)
+        self.isAlloced = True
+        # return the cash flow
+        return self.sttCost
+
+    def evolve(self, date, px):
+        if not self.isAlloced:
+            raise "No cash alloced, need to call setupAllocAmount to init"
+        if date < self.lastDate:
+            raise "Should not evolve to past date %s while evolve date is %s" % (date.strftime("%Y%m%d"), self.lastDate.strftime("%Y%m%d"))
+        if self.unwinded:
+            return (0., 0.) # only return zero MTM/Cashflow, do nothing
+        if self.validate(px):
+            self.evolveCounter += 1
+            # roll to A+B at T+2
+            if self.evolveCounter == 2:
+                self.lastPos = {'Fund': 0, 'A': self.sttPos['Fund'] * self.weight['AWeight'], 'B': self.sttPos['Fund'] * self.weight['BWeight']}
+            # need to consider position change from downfold/upfold after spliting to A and B
+            if px['BValue'] - self.lastpx['BValue'] > 0.2 and self.evolveCounter >= 2:
+                # downfold happened
+                if self.downfolded or self.upfolded:
+                    raise "ticker %s, pos stt %s, date %s, multiple fold happen" % ('/'.join(self.Ticker), self.startDate.strftime("%Y%m%d"), date.strftime("%Y%m%d")) 
+                self.downfolded = True
+                ashare          = self.lastPos['A']
+                bshare          = self.lastPos['B']
+                fshare          = ashare * abs(self.lastpx['AValue'] - self.lastpx['BValue'])
+                self.lastPos = {'Fund': fshare, 'A': ashare * self.lastpx['BValue'], 'B': bshare * self.lastpx['BValue']}
+            if px['BValue'] - self.lastpx['BValue'] < -0.2 and self.evolveCounter >= 2:
+                # upfold happened
+                if self.downfolded or self.upfolded:
+                    raise "ticker %s, pos stt %s, date %s, multiple fold happen" % ('/'.join(self.Ticker), self.startDate.strftime("%Y%m%d"), date.strftime("%Y%m%d")) 
+                self.upfolded   = True
+                ashare          = self.lastPos['A']
+                bshare          = self.lastPos['B']
+                fshare          = ashare * self.lastpx['AValue'] + bshare * self.lastpx['BValue'] - ashare - bshare
+                self.lastPos = {'Fund': fshare, 'A': ashare, 'B': bshare}
+            
+            self.lastpx   = dict(px)
+            self.lastDate = date
+            fval          = px['FundValue'] if self.notExchTraded else px['FundPrice']
+            self.lastMTM  = self.lastPos['Fund'] * fval * (1 - self.unwindRate) + (self.lastPos['A'] * px['APrice'] + self.lastPos['B'] * px['BPrice']) * (1 - self.sellFeeRate)
+            if self.evolveCounter >= 3:
+                self.unwinded = True
+                self.endDate  = date
+                return (0., self.lastMTM)
+            else:
+                return (self.lastMTM, 0.)  
+        else:
+            return (self.lastMTM, 0.)
+            
     def getSummary(self):
-        totalpnl  = self.sellcash - self.buycash
-        totalcost = self.buycost + self.mcost, self.sellcost
-         
-        return [self.ticker, self.sttdate, self.px, self.apx, self.bpx, 
-                self.lastday, self.lastpx, self.lastapx, self.lastbpx, 
-                self.buylots, self.nblots, self.dfold, self.ufold,
-                self.buycost, self.mcost, self.sellcost, totalcost,
-                totalpnl, estpnl]   
+        self.totalpnl  = self.lastMTM - self.sttCost
+        self.estpnl    = (self.sttPos['A'] * self.sttpx['APrice'] + self.sttPos['B'] * self.sttpx['BPrice']) * (1 - self.sellFeeRate)
+        self.mktpnl    = self.totalpnl - self.estpnl
+        return super(ABMergePos, self).getSummary()
+        
