@@ -5,6 +5,8 @@ import pandas
 import bisect
 import datetime, time
 from pandas.tseries.offsets import BDay
+import TransactionFee
+
 
 def loadFundInfo(fundInfoFile):
     df         = pandas.read_csv(fundInfoFile, sep=',')
@@ -60,6 +62,7 @@ def loadFundData(fundDataFolder, fundInfo, simStart, simEnd):
     foutname = fundDataFolder+'/dumpdata_'+simStart.strftime('%Y%m%d')+'_'+simEnd.strftime('%Y%m%d')+'.csv'
     df.to_csv(foutname, sep=',')
     return df
+
 
 STANDARD_FEE    = 0.005
 FUND_TXFEE_DICT = {

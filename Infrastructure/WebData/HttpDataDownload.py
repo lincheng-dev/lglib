@@ -82,7 +82,7 @@ class DataFetcher(object):
             if row['Ticker'] not in self.includeList.values:
                 continue
             executeFunc = funcmap(row['Source'], row['Type'], row['Ticker'])
-            execstr     = ' '.join([row['Ticker'], row['Source'], row['Type'], row['StartDate'].strftime('%Y%m%d'), row['EndDate'].strftime('%Y-%m-%d')])
+            execstr     = ' '.join([row['Ticker'], row['Source'], row['Type'], row['StartDate'].strftime('%Y-%m-%d'), row['EndDate'].strftime('%Y-%m-%d')])
             dfobj       = None
             try:
                 dfobj = executeFunc(row['Ticker'], row['StartDate'], row['EndDate'], asc=self.asc)
