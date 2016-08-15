@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import datetime
 import TransactionFee
-from numpy import floor
+from numpy import floor, abs
 
 def NotExchFund(ticker):
     return ticker.startswith('16')
@@ -54,7 +54,7 @@ class ABFundPos(object):
     def validate(px):
         # always need BValue to check whether it is in normal status
         validvalue = px['AValue'] > 0.01 and px['BValue'] > 0.01 and px['FundValue'] > 0.01
-        validprice = px['APrice'] > 0.01 and px['BPrice'] > 0.01 and px['FundPrice'] > 0.01
+        validprice = px['APrice'] > 0.01 and px['BPrice'] > 0.01 and px['FundPrice'] > 0.01 and abs(px['FundPrice']-1.0) > 1.e-8
         return validvalue and validprice
     
     def getTicker(self):
@@ -289,7 +289,7 @@ class FundSplitPos(ABFundPos):
             
     def getSummary(self):
         self.totalpnl  = self.lastMTM - self.sttCost
-        self.estpnl    = (self.sttPos['A'] * self.sttpx['APrice'] + self.sttPos['B'] * self.sttpx['BPrice']) * (1 - self.sellFeeRate) - self.sttCost
+        self.estpnl    = (self.sttPos['Fund'] * self.weight['AWeight'] * self.sttpx['APrice'] + self.sttPos['Fund'] * self.weight['BWeight'] * self.sttpx['BPrice']) * (1 - self.sellFeeRate) - self.sttCost
         self.mktpnl    = self.totalpnl - self.estpnl
         return super(FundSplitPos, self).getSummary()
         
