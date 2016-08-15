@@ -5,8 +5,8 @@ import pandas
 import bisect
 import datetime, time
 from pandas.tseries.offsets import BDay
-import TransactionFee
-
+from FundInstrument import ABMergePos, FundSplitPos
+import logging
 
 def loadFundInfo(fundInfoFile):
     df         = pandas.read_csv(fundInfoFile, sep=',')
@@ -71,7 +71,7 @@ def loadFundData(fundDataFolder, fundInfo, simStart, simEnd):
         dfloc   = pandas.concat(sloc, axis=1)
         dfloc.columns = headerList
         seriesList.append(dfloc)
-        keyList.append(ticker)
+        keyList.append(str(ticker))
         print "Done "+ticker
     df = pandas.concat(seriesList, axis=1, keys=keyList)
     df.fillna(0., inplace=True)
@@ -79,25 +79,98 @@ def loadFundData(fundDataFolder, fundInfo, simStart, simEnd):
     df.to_csv(foutname, sep=',')
     return df
 
-class CashPos():
-    pass
+def collectArbOp(fundInfo, pxSlice, arbMargin):
+    arbList = []
+    for ticker, px in pxSlice.groupby(level=0):
+        tickerInfo  = fundInfo.ix[ticker]
+        tickerpx    = px[ticker]
+        mergeMargin = ABMergePos.getArbMargin(ticker, tickerpx, tickerInfo)
+        splitMargin = FundSplitPos.getArbMargin(ticker, tickerpx, tickerInfo)
+        if mergeMargin > arbMargin:
+            infoDict = dict(tickerpx)
+            infoDict.update(dict(tickerInfo))
+            arbList.append((mergeMargin, 'MERGE', infoDict))
+        if splitMargin > arbMargin:
+            infoDict = dict(tickerpx)
+            infoDict.update(dict(tickerInfo))
+            arbList.append((splitMargin, 'SPLIT', infoDict))
+    arbList.sort(reverse=True, key=lambda x: x[0])
+    return arbList
 
+def printDictList(fileName, dictList):
+    if len(dictList) == 0:
+        return
+    fout    = open(fileName, 'w')
+    keylist = dictList[0].keys().sort()
+    fout.write(';'.join(keylist)+';\n')
+    for curDict in dictList:
+        for key in keylist:
+            fout.write(curDict[key]+';')
+        fout.write('\n')
+    fout.close()
+    
 if __name__ == "__main__":
     try:
         fundInfoFile   = sys.argv[1]
         fundDataFolder = sys.argv[2]
         simStartStr    = sys.argv[3]
         simEndStr      = sys.argv[4]
+        outPath        = sys.argv[5]
     except:
-        print "Usage: CMD fundInfoFile fundDataFolder simStart simEnd"
+        print "Usage: CMD fundInfoFile fundDataFolder simStart simEnd outPath"
         sys.exit(0)
     
+    print "Collecting fund info"
     fundInfo = loadFundInfo(fundInfoFile)
     simStart = datetime.datetime(*(time.strptime(simStartStr.strip(), "%Y%m%d")[0:6]))
     simEnd   = datetime.datetime(*(time.strptime(simEndStr.strip(), "%Y%m%d")[0:6]))
+    print "Collecting fund data"
     fundData = loadFundData(fundDataFolder, fundInfo, simStart, simEnd)
     
+    cashAmt               = 200000.         # initial cash
+    cashUnit              = 50000.          # least invest 50000. cash
+    canInvestLessThanUnit = False           # can/cannot invest less than cash unit
+    nbOpCheck             = 5               # number of oppurtunities to check
+    arbMargin             = 1.e-8           # margin weight for doing trade
+    curDate               = simStart
+    curCashAmt            = cashAmt
+    curMTM                = 0.0
+    posList               = []
+    mtmList               = []
+    print "Start simulation"
+    while curDate <= simEnd:
+        print "Working on %s" % curDate.strftime("%Y%m%d")
+        if curDate not in fundData.index:
+            continue
+        curMTM = 0.0
+        for pos in posList:
+            posMTM, posCash = pos.evolve()
+            curMTM         += posMTM
+            curCashAmt     += posCash
+        
+        curMTM += curCashAmt
+        mtmList.append({'Date': curDate.strftime("%Y%m%d"), 'MTM': curMTM, 'Cash': curCashAmt})
+        
+        pxSlice     = fundData.ix[curDate]
+        arbList     = collectArbOp(fundInfo, pxSlice, arbMargin)
+        curCashUnit = max([curCashAmt / nbOpCheck, cashUnit])
+        for arb in arbList[0:nbOpCheck]:
+            # at least invest cashUnit
+            if curCashAmt > cashUnit:
+                infoDict              = arb[2]
+                infoDict['StartDate'] = curDate
+                newPos                = ABMergePos(**infoDict) if arb[1] == 'MERGE' else FundSplitPos(**infoDict)
+                newCost               = newPos.setupAllocAmount(min([curCashAmt, curCashUnit]))
+                curCashAmt           -= newCost
+                posList.append(newPos)
+                print "%s position created with %12.2f cash, remaining %12.2f" % (arb[1], newCost, curCashAmt)
+        
+        curDate = curDate + datetime.timedelta(1)
     
+    fMTM = outPath + '/MTM_log_' + simStartStr + '_' + simEndStr + '.log'
+    fPos = outPath + '/POS_log_' + simStartStr + '_' + simEndStr + '.log'
+    printDictList(fMTM, mtmList)
+    printDictList(fPos, posList)
     
     
         

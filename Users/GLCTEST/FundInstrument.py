@@ -79,16 +79,24 @@ class ABFundPos(object):
         for key in self.lastPos:
             outdict['last'+key] = self.lastPos[key]
             
-        outdict['startDate']  = self.startDate
-        outdict['endDate']    = self.endDate
-        outdict['upfolded']   = self.upfolded
-        outdict['downfolded'] = self.downfolded
-        outdict['totalPnL']   = self.totalpnl
-        outdict['estPnL']     = self.estpnl
-        outdict['mktPnL']     = self.mktpnl
-        outdict['sttCost']    = self.sttCost
-        outdict['lastMTM']    = self.lastMTM
+        outdict['startDate']  = self.startDate.strftime("%Y%m%d")
+        outdict['endDate']    = self.endDate.strftime("%Y%m%d")
+        outdict['upfolded']   = str(self.upfolded)
+        outdict['downfolded'] = str(self.downfolded)
+        outdict['totalPnL']   = str(self.totalpnl)
+        outdict['estPnL']     = str(self.estpnl)
+        outdict['mktPnL']     = str(self.mktpnl)
+        outdict['sttCost']    = str(self.sttCost)
+        outdict['lastMTM']    = str(self.lastMTM)
+        outdict['type']       = self.type
         
+        for key in self.sttpx:
+            outdict[key]        = str(outdict[key])
+            outdict['last'+key] = str(outdict['last'+key])
+        for key in self.sttPos:
+            outdict[key]        = str(outdict[key])
+            outdict['last'+key] = str(outdict['last'+key])
+            
         return outdict  
         
 class ABMergePos(ABFundPos):
@@ -96,6 +104,7 @@ class ABMergePos(ABFundPos):
     def __init__(self, *args, **kwargs):
         # basic fact
         super(ABMergePos, self).__init__(*args, **kwargs)
+        self.type = 'MERGE'
     
     @staticmethod
     def getArbMargin(Ticker, px, wt):
@@ -182,6 +191,7 @@ class FundSplitPos():
     def __init__(self, *args, **kwargs):
         # basic fact
         super(ABMergePos, self).__init__(*args, **kwargs)
+        self.type = 'SPLIT'
     
     @staticmethod
     def getArbMargin(Ticker, px, wt):
