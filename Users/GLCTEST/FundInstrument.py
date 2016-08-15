@@ -56,6 +56,9 @@ class ABFundPos(object):
         validvalue = px['AValue'] > 0.01 and px['BValue'] > 0.01 and px['FundValue'] > 0.01
         validprice = px['APrice'] > 0.01 and px['BPrice'] > 0.01 and px['FundPrice'] > 0.01
         return validvalue and validprice
+    
+    def getTicker(self):
+        return self.ticker['Ticker']
 
     def getStartDate(self):
         raise self.startDate
@@ -186,11 +189,11 @@ class ABMergePos(ABFundPos):
         self.mktpnl    = self.totalpnl - self.estpnl
         return super(ABMergePos, self).getSummary()
         
-class FundSplitPos():
+class FundSplitPos(ABFundPos):
     
     def __init__(self, *args, **kwargs):
         # basic fact
-        super(ABMergePos, self).__init__(*args, **kwargs)
+        super(FundSplitPos, self).__init__(*args, **kwargs)
         self.type = 'SPLIT'
     
     @staticmethod
@@ -288,5 +291,5 @@ class FundSplitPos():
         self.totalpnl  = self.lastMTM - self.sttCost
         self.estpnl    = (self.sttPos['A'] * self.sttpx['APrice'] + self.sttPos['B'] * self.sttpx['BPrice']) * (1 - self.sellFeeRate) - self.sttCost
         self.mktpnl    = self.totalpnl - self.estpnl
-        return super(ABMergePos, self).getSummary()
+        return super(FundSplitPos, self).getSummary()
         

@@ -72,7 +72,7 @@ def loadFundData(fundDataFolder, fundInfo, simStart, simEnd):
         dfloc.columns = headerList
         seriesList.append(dfloc)
         keyList.append(str(ticker))
-        print "Done "+ticker
+        #print "Done "+ticker
     df = pandas.concat(seriesList, axis=1, keys=keyList)
     df.fillna(0., inplace=True)
     foutname = fundDataFolder+'/dumpdata_'+simStart.strftime('%Y%m%d')+'_'+simEnd.strftime('%Y%m%d')+'.csv'
@@ -101,7 +101,7 @@ def printDictList(fileName, dictList):
     if len(dictList) == 0:
         return
     fout    = open(fileName, 'w')
-    keylist = dictList[0].keys().sort()
+    keylist = sorted(dictList[0].keys())
     fout.write(';'.join(keylist)+';\n')
     for curDict in dictList:
         for key in keylist:
@@ -141,17 +141,19 @@ if __name__ == "__main__":
     while curDate <= simEnd:
         print "Working on %s" % curDate.strftime("%Y%m%d")
         if curDate not in fundData.index:
+            curDate = curDate + datetime.timedelta(1)
             continue
+        pxSlice = fundData.ix[curDate]
+        
         curMTM = 0.0
         for pos in posList:
-            posMTM, posCash = pos.evolve()
+            posMTM, posCash = pos.evolve(curDate, dict(pxSlice[pos.getTicker()]))
             curMTM         += posMTM
             curCashAmt     += posCash
         
         curMTM += curCashAmt
-        mtmList.append({'Date': curDate.strftime("%Y%m%d"), 'MTM': curMTM, 'Cash': curCashAmt})
+        mtmList.append({'Date': curDate.strftime("%Y%m%d"), 'MTM': str(curMTM), 'Cash': str(curCashAmt)})
         
-        pxSlice     = fundData.ix[curDate]
         arbList     = collectArbOp(fundInfo, pxSlice, arbMargin)
         curCashUnit = max([curCashAmt / nbOpCheck, cashUnit])
         for arb in arbList[0:nbOpCheck]:
@@ -167,10 +169,11 @@ if __name__ == "__main__":
         
         curDate = curDate + datetime.timedelta(1)
     
-    fMTM = outPath + '/MTM_log_' + simStartStr + '_' + simEndStr + '.log'
-    fPos = outPath + '/POS_log_' + simStartStr + '_' + simEndStr + '.log'
+    fMTM    = outPath + '/MTM_log_' + simStartStr + '_' + simEndStr + '.log'
+    fPos    = outPath + '/POS_log_' + simStartStr + '_' + simEndStr + '.log'
+    sumList = [pos.getSummary() for pos in posList]
     printDictList(fMTM, mtmList)
-    printDictList(fPos, posList)
+    printDictList(fPos, sumList)
     
     
         
