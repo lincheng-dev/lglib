@@ -67,7 +67,7 @@ class ABFundPos(object):
         return self.endDate
     
     def getFundPos(self):
-        return (self.APos, self.BPos, self.FPos)
+        return self.lastPos
     
     def getSummary(self):
         outdict   = {}
@@ -102,8 +102,8 @@ class ABMergePos(ABFundPos):
         if not ABFundPos.validate(px):
             return 0.0
             
-        apx = px['APrice']
-        bpx = px['BPrice']  
+        apx     = px['APrice']
+        bpx     = px['BPrice']
         buyFee  = 0.
         sellFee = 0. 
         fval    = 0.     
@@ -173,7 +173,7 @@ class ABMergePos(ABFundPos):
     def getSummary(self):
         self.totalpnl  = self.lastMTM - self.sttCost
         fval           = self.sttpx['FundValue'] if self.notExchTraded else self.sttpx['FundPrice']
-        self.estpnl    = (self.sttPos['A'] + self.sttPos['B']) * fval * (1 - self.sellFeeRate)
+        self.estpnl    = (self.sttPos['A'] + self.sttPos['B']) * fval * (1 - self.sellFeeRate) - self.sttCost
         self.mktpnl    = self.totalpnl - self.estpnl
         return super(ABMergePos, self).getSummary()
         
@@ -188,8 +188,8 @@ class FundSplitPos():
         if not ABFundPos.validate(px):
             return 0.0
             
-        apx = px['APrice']
-        bpx = px['BPrice']  
+        apx     = px['APrice']
+        bpx     = px['BPrice']  
         buyFee  = 0.
         sellFee = 0. 
         fval    = 0.     
@@ -249,7 +249,7 @@ class FundSplitPos():
                 self.downfolded = True
                 ashare          = self.lastPos['A']
                 bshare          = self.lastPos['B']
-                fshare          = ashare * abs(self.lastpx['AValue'] - self.lastpx['BValue'])
+                fshare          = ashare * self.lastpx['AValue'] - self.lastpx['BValue']
                 self.lastPos = {'Fund': fshare, 'A': ashare * self.lastpx['BValue'], 'B': bshare * self.lastpx['BValue']}
             if px['BValue'] - self.lastpx['BValue'] < -0.2 and self.evolveCounter >= 2:
                 # upfold happened
@@ -276,7 +276,7 @@ class FundSplitPos():
             
     def getSummary(self):
         self.totalpnl  = self.lastMTM - self.sttCost
-        self.estpnl    = (self.sttPos['A'] * self.sttpx['APrice'] + self.sttPos['B'] * self.sttpx['BPrice']) * (1 - self.sellFeeRate)
+        self.estpnl    = (self.sttPos['A'] * self.sttpx['APrice'] + self.sttPos['B'] * self.sttpx['BPrice']) * (1 - self.sellFeeRate) - self.sttCost
         self.mktpnl    = self.totalpnl - self.estpnl
         return super(ABMergePos, self).getSummary()
         
