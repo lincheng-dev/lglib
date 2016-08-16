@@ -15,11 +15,13 @@ def loadFundInfo(fundInfoFile):
     bTicker    = df['bTicker'].map(lambda x: str(x))
     aRatio     = df['abWeight'].map(lambda x: float(x.split(':')[0]))
     bRatio     = df['abWeight'].map(lambda x: float(x.split(':')[1]))
+    upFold     = df['upFold']
+    downFold   = df['downFold']
     sumab      = aRatio + bRatio
     aRatio     = aRatio/sumab
     bRatio     = bRatio/sumab
-    newdf      = pandas.concat([baseTicker, aTicker, bTicker, aRatio, bRatio], axis=1)
-    newdf.columns = ['Ticker', 'ATicker', 'BTicker', 'AWeight', 'BWeight']
+    newdf      = pandas.concat([baseTicker, aTicker, bTicker, aRatio, bRatio, upFold, downFold], axis=1)
+    newdf.columns = ['Ticker', 'ATicker', 'BTicker', 'AWeight', 'BWeight', 'UpFold', 'DownFold']
     newdf.index   = newdf['Ticker']
     return newdf
 
