@@ -20,7 +20,7 @@ class TxFee(object):
         
 class TxFeeFundExchTrade(TxFee): 
     __metaclass__ = TxSingleton
-    def __init__(self, txRate=0.0003):
+    def __init__(self, txRate=0.0019):
         super(TxFeeFundExchTrade, self).__init__(txRate)
 
 class TxFeeFundSub(TxFee):

@@ -6,7 +6,6 @@ import bisect
 import datetime, time
 from pandas.tseries.offsets import BDay
 from FundInstrument import ABMergePos, FundSplitPos
-import logging
 
 def loadFundInfo(fundInfoFile):
     df         = pandas.read_csv(fundInfoFile, sep=',')
@@ -44,33 +43,38 @@ def getFundTickerData(ticker, fundDataFolder, simStart, simEnd):
     valsttid    = bisect.bisect_left(valdf.index, simStart)
     valendid    = bisect.bisect_left(valdf.index, simEnd)
     
-    sv = pandas.Series()
-    sp = pandas.Series()
+    sv   = pandas.Series()
+    sp   = pandas.Series()
+    svol = pandas.Series()
     if ticker.startswith('16'):
-        sv = valdf['UnitValue'][valsttid:valendid]
-        sp = pxdf['UnitValue'][pxsttid:pxendid]
+        sv   = valdf['UnitValue'][valsttid:valendid]
+        sp   = pxdf['UnitValue'][pxsttid:pxendid]
+        svol = dummyS
     else:
-        sv = valdf['UnitValue'][valsttid:valendid]
-        sp = pxdf['Close'][pxsttid:pxendid]
+        sv   = valdf['UnitValue'][valsttid:valendid]
+        sp   = pxdf['Close'][pxsttid:pxendid]
+        svol = pxdf['Amount'][pxsttid:pxendid]  
     if len(sv) == 0:
         sv = dummyS
     if len(sp) == 0:
         sp = dummyS
-    return (sv, sp)
+    if len(svol) == 0:
+        svol = dummyS
+    return (sv, sp, svol)
 
 def loadFundData(fundDataFolder, fundInfo, simStart, simEnd):
     seriesList = []
     keyList    = []
-    headerList = ['FundValue', 'AValue', 'BValue', 'FundPrice', 'APrice', 'BPrice']
+    headerList = ['FundValue', 'AValue', 'BValue', 'FundPrice', 'APrice', 'BPrice', 'FundAmount', 'AAmount', 'BAmount']
     
     for ticker in fundInfo.index:
-        aticker = fundInfo.ix[ticker]['ATicker']
-        bticker = fundInfo.ix[ticker]['BTicker']
-        fv, fp  = getFundTickerData(ticker, fundDataFolder, simStart, simEnd)
-        av, ap  = getFundTickerData(aticker, fundDataFolder, simStart, simEnd)
-        bv, bp  = getFundTickerData(bticker, fundDataFolder, simStart, simEnd)
-        sloc    = [fv, av, bv, fp, ap, bp]
-        dfloc   = pandas.concat(sloc, axis=1)
+        aticker       = fundInfo.ix[ticker]['ATicker']
+        bticker       = fundInfo.ix[ticker]['BTicker']
+        fv, fp, fvol  = getFundTickerData(ticker, fundDataFolder, simStart, simEnd)
+        av, ap, avol  = getFundTickerData(aticker, fundDataFolder, simStart, simEnd)
+        bv, bp, bvol  = getFundTickerData(bticker, fundDataFolder, simStart, simEnd)
+        sloc          = [fv, av, bv, fp, ap, bp, fvol, avol, bvol]
+        dfloc         = pandas.concat(sloc, axis=1)
         dfloc.columns = headerList
         seriesList.append(dfloc)
         keyList.append(str(ticker))
@@ -107,7 +111,7 @@ def printDictList(fileName, dictList):
     fout.write(';'.join(keylist)+';\n')
     for curDict in dictList:
         for key in keylist:
-            fout.write(curDict[key]+';')
+            fout.write(str(curDict[key])+';')
         fout.write('\n')
     fout.close()
     
