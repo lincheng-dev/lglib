@@ -143,7 +143,7 @@ def get_fund_price_data_163(ticker='150008', start=datetime.date(2016,1,1), end=
         tdtable = [fmt163(tr) for tr in nodes]
         td_content += tdtable
     
-    header = ['Date', 'Close', 'PriceChange', 'Volumn', 'Amount', 'TurnOver', 'Discount']
+    header = ['Date', 'Close', 'PriceChange', 'Volume', 'Amount', 'Turnover', 'Discount']
     df     = DataFrame(data=td_content, columns=header)
     df     = df.set_index(['Date'])
     return df
