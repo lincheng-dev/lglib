@@ -19,9 +19,14 @@ class DataCrawler:
         self.password = password
         self.dbase = dbase
 
-    def crawlData(self, dataSrc, ticker, beginDate=beginDate, endDate = today):
+    def crawlData(self, dataSrc, ticker, beginDate=beginDate, endDate = today, mode="UnitValue"):
         if dataSrc == "163":
-            return WebData.get_fund_price_data_163(ticker=ticker, start=beginDate, end=endDate)
+            if mode=="UnitValue":
+                return WebData.get_fund_value_data_163(ticker=ticker, start=beginDate, end=endDate)
+            elif mode=="Price":
+                return WebData.get_fund_price_data_163(ticker=ticker, start=beginDate, end=endDate)
+            else:
+                raise Exception("unrecognized web data grab mode %s"%mode)
         else:
             raise Exception("dataSrc %s not supported yet"%(dataSrc))
 
@@ -83,9 +88,6 @@ class DataCrawler:
         else:
             raise Exception("dataSrc %s not supported yet" % (dataSrc))
 
-    def verifyData(self, dbData, webData):
-        pass
-
     def updateDb(self, ticker, webData, indicesInsert, indicesUpdate, dataSrc, primaryKeys=["Ticker","Date"]):
         connector = self.getSqlConnection()
         cursor = connector.cursor()
@@ -134,23 +136,30 @@ class DataCrawler:
         connector.commit()
         connector.close()
 
+    def verifyData(self, dbData, webData):
+        indicesToUpdate = []
+        indicesToInsert = []
+        for idx_web in webData.index:
+            if idx_web not in dbData.index:
+                indicesToInsert.append(idx_web)
+            else:
+                for col in webData.columns:
+                    if not np.isclose(webData.loc[idx_web, col], dbData.loc[idx_web, col], equal_nan=True):
+                        indicesToUpdate.append(idx_web)
+                        break
+        return indicesToUpdate, indicesToInsert
+
     def fillDataBase(self, dataSrc, ticker):
         if dataSrc == "163":
-            webData = self.crawlData(dataSrc, ticker)
-            webData.index = [d[0].date() for d in webData.index]
             dbData = self.fetchDataFromDb(dataSrc, ticker)
-            dbData = dbData[webData.columns]
-            indicesToUpdate = []
-            indicesToInsert = []
-            for idx_web in webData.index:
-                if idx_web not in dbData.index:
-                    indicesToInsert.append(idx_web)
-                else:
-                    for col in webData.columns:
-                        if not np.isclose(webData.loc[idx_web,col],dbData.loc[idx_web,col],equal_nan=True):
-                            indicesToUpdate.append(idx_web)
-                            break
-            self.updateDb(ticker, webData, indicesToInsert, indicesToUpdate, dataSrc)
+            unitValWebData = self.crawlData(dataSrc, ticker, mode="UnitValue")
+            unitValWebData.index = [d[0].date() for d in unitValWebData.index]
+            indicesToUpdate, indicesToInsert = self.verifyData(dbData, unitValWebData)
+            self.updateDb(ticker, unitValWebData, indicesToInsert, indicesToUpdate, dataSrc)
+            priceWebData = self.crawlData(dataSrc, ticker, mode="Price")
+            priceWebData.index = [d[0].date() for d in priceWebData.index]
+            indicesToUpdate, indicesToInsert = self.verifyData(dbData, priceWebData)
+            self.updateDb(ticker, priceWebData, indicesToInsert, indicesToUpdate, dataSrc)
         else:
             raise Exception("dataSrc %s not supported yet" % (dataSrc))
 
