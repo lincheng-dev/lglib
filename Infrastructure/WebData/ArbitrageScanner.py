@@ -45,11 +45,11 @@ class ArbitrageScanner:
                 continue
             arbitrageRate = 0.0
             if aWeight*aQuote+bWeight*bQuote > (aWeight+bWeight)*baseQuote*(1+threshold):
-                arbitrageRate = (aWeight*aQuote+bWeight*bQuote) / ((aWeight+bWeight)*baseQuote) - baseSubscription - exchangeCommission
+                arbitrageRate = (aWeight*aQuote+bWeight*bQuote) / ((aWeight+bWeight)*baseQuote) - baseSubscription - exchangeCommission - 1.0
                 arbitrageArray.append([bTicker, baseTicker, aQuote, bQuote, baseQuote, aWeight, bWeight, arbitrageRate])
                 arbitrageIndices.append((now, aTicker))
             elif (aWeight*aQuote+bWeight*bQuote)*(1+threshold) < (aWeight+bWeight)*baseQuote:
-                arbitrageRate = ((aWeight + bWeight) * baseQuote) / (aWeight * aQuote + bWeight * bQuote) - exchangeCommission - unwindRate
+                arbitrageRate = ((aWeight + bWeight) * baseQuote) / (aWeight * aQuote + bWeight * bQuote) - exchangeCommission - unwindRate - 1.0
                 arbitrageArray.append([bTicker, baseTicker, aQuote, bQuote, baseQuote, aWeight, bWeight, arbitrageRate])
                 arbitrageIndices.append((now, aTicker))
         arbitrageTable = pd.DataFrame(data=arbitrageArray, index=arbitrageIndices, columns=["bTicker","baseTicker","aPrice","bPrice","basePrice","aWeight","bWeight","arbitrageRate"])
