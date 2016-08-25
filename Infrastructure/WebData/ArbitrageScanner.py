@@ -3,6 +3,7 @@ import datetime
 import pandas as pd
 import threading
 import time
+import numpy as np
 
 class ArbitrageScanner:
     def __init__(self):
@@ -21,6 +22,9 @@ class ArbitrageScanner:
         self.fundParam = self.fundParam.set_index('aTicker')
         self.fundParam = self.fundParam.drop('abWeight',axis=1)
 
+    def isZero(self, value):
+        return np.isclose(value, 0.0, equal_nan=True)
+
     def scan(self, threshold=0.03, exchangeCommission=0.002, unwindRate=0.005, baseSubscription=0.015, dumpFile="H:\\HashiCorp\\Vagrant\\bin\\arbitrage_summary.txt"):
         now = datetime.datetime.now()
         arbitrageArray = []
@@ -34,6 +38,8 @@ class ArbitrageScanner:
                 aQuote = WebData.get_fund_quote(aTicker).loc[0,"price"]
                 bQuote = WebData.get_fund_quote(bTicker).loc[0,"price"]
                 baseQuote = WebData.get_fund_quote(baseTicker).loc[0,"price"]
+                if self.isZero(aQuote) or self.isZero(bQuote) or self.isZero(baseQuote):
+                    continue
             except Exception as e:
                 print "fail to load quote for (%s,%s,%s) with error %s, skip"%(aTicker,bTicker,baseTicker, str(e))
                 continue
