@@ -4,6 +4,8 @@ import pandas as pd
 import threading
 import time
 import numpy as np
+import sys
+import getopt
 
 class ArbitrageScanner:
     def __init__(self):
@@ -54,19 +56,37 @@ class ArbitrageScanner:
                 arbitrageIndices.append((now, aTicker))
         arbitrageTable = pd.DataFrame(data=arbitrageArray, index=arbitrageIndices, columns=["bTicker","baseTicker","aPrice","bPrice","basePrice","aWeight","bWeight","arbitrageRate"])
         arbitrageTable = arbitrageTable.sort(columns=["arbitrageRate"],ascending=False)
-        summary = arbitrageTable.to_string()
+        summary = "\n" + arbitrageTable.to_string()
         print summary
         file = open(name=dumpFile,mode="a+")
         file.write(summary)
         file.close()
 
-scanner = ArbitrageScanner()
-scanner.scan()
-'''
-SCAN_INTERVAL=900
-while True:
+def singleScan():
     scanner = ArbitrageScanner()
-    timer=threading.Timer(SCAN_INTERVAL, scanner.scan)
-    timer.start()
-    time.sleep(SCAN_INTERVAL)
-'''
+    scanner.scan()
+
+def repeatedScan(scan_interval=900):
+    while True:
+        scanner = ArbitrageScanner()
+        scanner.scan()
+        time.sleep(scan_interval)
+
+def main():
+    # parse command line options
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], "h", ["help"])
+    except getopt.error, msg:
+        print msg
+        print "for help use --help"
+        sys.exit(2)
+    # process arguments
+    if args[0]=="repeat":
+        repeatedScan()
+    elif args[0]=="single":
+        singleScan()
+    else:
+        print "unrecognized mode %s"%(args[0])
+
+if __name__ == "__main__":
+    main()
