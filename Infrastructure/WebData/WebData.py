@@ -7,11 +7,26 @@ import requests
 import datetime, time
 from pandas import DataFrame
 from lxml import etree
+import tushare as ts
 
 # historical url
 _HISTORICAL_HEXUN_URL  = 'http://data.funds.hexun.com/outxml/detail/openfundnetvalue.aspx?'
 _HISTORICAL_GOOGLE_URL = 'http://www.google.com/finance/historical?'
 _HISTORICAL_163_URL    = 'http://quotes.money.163.com/fund/'
+
+#retrieve real time quotes from tushare
+def get_fund_quote_ts(ticker='150033'):
+    '''
+name               金融地A     open              1.093     pre_close         1.080     price             1.083     high              1.095
+low               1.081         bid               1.083    ask               1.093      volume           109100     amount       119215.600
+b1_v                148         b1_p              1.083     b2_v                100     b2_p              1.081     b3_v                 35
+b3_p              1.078         b4_v                100     b4_p              1.077     b5_v                200     b5_p              1.075
+a1_v                460         a1_p              1.093     a2_v                669     a2_p              1.094     a3_v               1303
+a3_p              1.095         a4_v                250     a4_p              1.099     a5_v            a5_p              0.000
+date         2016-08-25         time           15:05:03     code             150281
+    '''
+    df = ts.get_realtime_quotes(ticker)
+    return df
 
 # retrieve fund est value from eastmoney
 def get_fund_quote_est_em(ticker='161121'):
