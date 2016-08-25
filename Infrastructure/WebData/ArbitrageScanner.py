@@ -82,7 +82,11 @@ def main():
         sys.exit(2)
     # process arguments
     if args[0]=="repeat":
-        repeatedScan()
+        if len(args)>=2:
+            interval = float(args[1])
+            repeatedScan(interval)
+        else:
+            repeatedScan()
     elif args[0]=="single":
         singleScan()
     else:
