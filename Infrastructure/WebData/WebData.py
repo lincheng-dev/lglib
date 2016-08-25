@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # Library for retrieving data from web
 import sys
-import urllib, urllib2
+import urllib, urllib2, httplib
 import requests
 import datetime, time
 from pandas import DataFrame
@@ -35,6 +35,27 @@ def wrapper(retry=5, timeout=3.0, interval=0.005):
             return df
         return call
     return decorator
+    
+# retrieve fund quote from hexun
+@wrapper()
+def get_fund_quote_hx(ticker='150019'):
+    url  = 'quote.stock.hexun.com'
+    path = '/stockdata/fund_quote.aspx?stocklist=' + ticker
+    conn = httplib.HTTPConnection(url)
+    conn.request("GET", path)
+    resp = conn.getresponse()
+    print ticker, resp.status, resp.reason
+    data = resp.read()
+    dataList = data.split('[[')[1].split(']]')[0].split(',')
+    assert ticker == dataList[0][1:-1], "input ticker %s inconsistent to output ticker %s" % (ticker, dataList[0][1:-1])
+    outdict = {}
+    outdict['Ticker']    = ticker
+    outdict['Price']     = float(dataList[2])
+    outdict['LastClose'] = float(dataList[4])
+    outdict['Open']      = float(dataList[5])
+    outdict['High']      = float(dataList[6])
+    outdict['Low']       = float(dataList[7])
+    return outdict
 
 #retrieve real time quotes from tushare
 @wrapper()
