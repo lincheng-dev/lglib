@@ -8,13 +8,36 @@ import datetime, time
 from pandas import DataFrame
 from lxml import etree
 import tushare as ts
-
+import time
+import socket
 # historical url
 _HISTORICAL_HEXUN_URL  = 'http://data.funds.hexun.com/outxml/detail/openfundnetvalue.aspx?'
 _HISTORICAL_GOOGLE_URL = 'http://www.google.com/finance/historical?'
 _HISTORICAL_163_URL    = 'http://quotes.money.163.com/fund/'
 
+def wrapper(retry=5, timeout=3.0, interval=0.005):
+    def decorator(func):
+        def call(*args, **kwargs):
+            previous_timeout = socket.getdefaulttimeout()
+            socket.setdefaulttimeout(timeout)
+            count = 0
+            df = None
+            while count < retry:
+                try:
+                    df = func(*args, **kwargs)
+                except Exception as e:
+                    print "call %s failed with error %s"%(func.__name__, str(e))
+                if not (df is None or df.empty):
+                    break
+                time.sleep(interval)
+                count += 1
+            socket.setdefaulttimeout(previous_timeout)
+            return df
+        return call
+    return decorator
+
 #retrieve real time quotes from tushare
+@wrapper()
 def get_fund_quote_ts(ticker='150033'):
     '''
 name               金融地A     open              1.093     pre_close         1.080     price             1.083     high              1.095
@@ -26,9 +49,19 @@ a3_p              1.095         a4_v                250     a4_p              1.
 date         2016-08-25         time           15:05:03     code             150281
     '''
     df = ts.get_realtime_quotes(ticker)
+    if df is not None:
+        strCols = df[["name", "date", "time", "code"]]
+        strCols = strCols.assign(date=lambda x: datetime.datetime.strptime(x.date.iloc[0]+" "+x.time.iloc[0], "%Y-%m-%d %H:%M:%S"))
+        strCols = strCols.drop("time", axis=1)
+        df = df.drop(["name", "date", "time", "code"], axis=1)
+        df = df.replace(to_replace="", value="nan")
+        df = df.astype(float)
+        df = df.join(strCols)
+        df = df.assign(data_src="ts")
     return df
 
 # retrieve fund est value from eastmoney
+@wrapper()
 def get_fund_quote_est_em(ticker='161121'):
     # need to validate fund
     # looks quite slow
@@ -41,7 +74,24 @@ def get_fund_quote_est_em(ticker='161121'):
     estval   = float(estvstr[0].text)
     esttmstr = tr_nodes[0].xpath('.//span[@id="gz_gztime"]')
     esttime  = datetime.datetime(*(time.strptime(esttmstr[0].text, "(%y-%m-%d %H:%M)")[0:6]))
-    return (esttime, estval)
+    df = DataFrame(data = [[ticker, esttime, estval, "est"]], index = [0],
+                      columns = ['code', 'date', 'price', 'data_src'])
+    return df
+
+def get_fund_quote(ticker="150033"):
+    ''' a unified interface to get real time quote '''
+    try:
+        df = get_fund_quote_ts(ticker)
+    except Exception as e:
+        print "get tushare quote failed with error %s"%(str(e))
+        df = None
+    if df is None or df.empty:
+        try:
+            df = get_fund_quote_est_em(ticker)
+        except Exception as e:
+            print "get eastmoney quote failed with error %s" % (str(e))
+            df = None
+    return df
 
 # retrieve fund historical value from netease
 def get_fund_value_data_163(ticker='150008', start=datetime.date(2016,1,1), end=datetime.date(2016,6,1), asc=False):
