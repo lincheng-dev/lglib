@@ -10,11 +10,43 @@ from lxml import etree
 import tushare as ts
 import time
 import socket
+import copy
 # historical url
 _HISTORICAL_HEXUN_URL  = 'http://data.funds.hexun.com/outxml/detail/openfundnetvalue.aspx?'
 _HISTORICAL_GOOGLE_URL = 'http://www.google.com/finance/historical?'
 _HISTORICAL_163_URL    = 'http://quotes.money.163.com/fund/'
 
+def NotExchFund(ticker):
+    return ticker.startswith('16')
+    
+def get_fund_quote_with_value(ticker="150033"):
+    ''' a unified interface to get real time quote with value '''
+    df = None
+    try:
+        if NotExchFund(ticker):
+            df = get_fund_quote_est_em(ticker)
+            df['b1_p']       = df['price']
+            df['a1_p']       = df['price']
+            df['b1_v']       = 100000
+            df['a1_v']       = 100000
+            df['value']      = df['price']
+            df['value_date'] = df['date']
+        else:
+            df = get_fund_quote_ts(ticker)
+    except Exception as e:
+        print "get quote failed with error %s ticker %s"%(str(e), ticker)
+        df = None
+        
+    try:
+        if not NotExchFund(ticker):
+            valdf = get_fund_quote_est_em(ticker)
+            df['value']      = valdf['price']
+            df['value_date'] = valdf['date']
+    except Exception as e:
+        print "get value failed with error %s ticker %s"%(str(e), ticker)
+        df = None
+    return df
+    
 def wrapper(retry=5, timeout=3.0, interval=0.005):
     def decorator(func):
         def call(*args, **kwargs):
