@@ -52,7 +52,7 @@ class TxFeeHelper(object):
         if (type, ticker) in feeList:
             return feeList[(type, ticker)]
         else:
-            fee = cls.calcFee(type, args, kwargs)
+            fee = cls.calcFee(type, *args, **kwargs)
             feeList[(type, ticker)] = fee 
             return fee
     
@@ -95,10 +95,11 @@ class StrucFundHelperDict(object):
     def getHelperForTicker(cls, *args, **kwargs):
         ticker = kwargs.get('Ticker', None)
         assert ticker != None, "Invalid ticker info in HelperDict.getHelperForTicker."
-        if cls.helperList.find(ticker):
+        if ticker in cls.helperList:
             return cls.helperList[ticker]
         else:
-            helperList[ticker] = StrucFundHelper(args, kwargs)
+            cls.helperList[ticker] = StrucFundHelper(*args, **kwargs)
+            return cls.helperList[ticker]
             
     @classmethod
     def reload(cls):
@@ -107,6 +108,7 @@ class StrucFundHelperDict(object):
 class StrucFundHelper(object):
     
     def __init__(self, *args, **kwargs):
+        print kwargs
         self.info             = {}
         self.info['Ticker']   = kwargs['Ticker']
         self.info['ATicker']  = kwargs['ATicker']
@@ -116,11 +118,32 @@ class StrucFundHelper(object):
         self.info['UpFold']   = kwargs['UpFold']
         self.info['DownFold'] = kwargs['DownFold']
     
-    def getArbMargin(self, type, pxinfo):
+    def validPxInfo(self, pxinfo):
+        baseInfo = pxinfo[self.info['Ticker']]
+        AInfo    = pxinfo[self.info['ATicker']]
+        BInfo    = pxinfo[self.info['BTicker']]
+        today    = datetime.date.today()
+        if baseInfo['price'][0] < 0.01 or AInfo['price'][0] < 0.01 or BInfo['price'][0] < 0.01:
+            print "price invalid %s, %s, %s" % (self.info['Ticker'], self.info['ATicker'], self.info['BTicker'])
+            return False
+        if baseInfo['date'][0].date() < today or baseInfo['value_date'][0].date() < today:
+            print "base price date invalid %s" % (self.info['Ticker'])
+            return False
+        if AInfo['date'][0].date() < today or AInfo['value_date'][0].date() < today:
+            print "A price date invalid %s" % (self.info['ATicker'])
+            return False
+        if BInfo['date'][0].date() < today or BInfo['value_date'][0].date() < today:
+            print "B price date invalid %s" % (self.info['BTicker'])
+            return False
+        return True
+        
+    def getArbMargin(self, type, pxinfo, threshold=0.0):
+        if not self.validPxInfo(pxinfo):
+            return None
         if type.upper() == 'SPLIT':
-            return self.getArbMarginSplit(pxinfo).update(self.info)
+            return self.getArbMarginSplit(pxinfo, threshold=threshold).update(self.info)
         elif type.upper() == 'MERGE':
-            return self.getArbMarginMerge(pxinfo).update(self.info)
+            return self.getArbMarginMerge(pxinfo, threshold=threshold).update(self.info)
         else:
             raise NotImplementedError
     

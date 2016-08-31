@@ -6,6 +6,9 @@ import time
 import numpy as np
 import sys
 import getopt
+import imp
+imp.load_source('StrucFundHelper', 'StrucFundHelper.py')
+import StrucFundHelper
 
 class ArbitrageScanner:
     def __init__(self):
@@ -26,7 +29,39 @@ class ArbitrageScanner:
 
     def isZero(self, value):
         return np.isclose(value, 0.0, equal_nan=True)
-
+    
+    def scan_detail(self, threshold=0.00, dumpFile="G:/Result/StrucFund/arb_list.txt"):
+        now = datetime.datetime.now()
+        arbitrageDFs = []
+        for aTicker in self.fundParam.index:
+            bTicker = self.fundParam.loc[aTicker, "bTicker"]
+            baseTicker = self.fundParam.loc[aTicker, "baseTicker"]
+            aWeight = self.fundParam.loc[aTicker, "aWeight"]
+            bWeight = self.fundParam.loc[aTicker, "bWeight"]
+            infoDict = {'Ticker': baseTicker, 'ATicker': aTicker, 'BTicker': bTicker, 'AWeight': aWeight, 'BWeight': bWeight, 'UpFold': 0., 'DownFold': 0.}
+            try:
+                aQuote = WebData.get_fund_quote_with_value(aTicker)
+                bQuote = WebData.get_fund_quote_with_value(bTicker)
+                baseQuote = WebData.get_fund_quote_with_value(baseTicker)
+                pxinfo = {baseTicker: baseQuote, aTicker: aQuote, bTicker: bQuote}
+            except Exception as e:
+                print "fail to load quote for (%s,%s,%s) with error %s, skip"%(aTicker,bTicker,baseTicker, str(e))
+                continue
+            fundHelper = StrucFundHelper.StrucFundHelperDict.getHelperForTicker(**infoDict)
+            mergeArb   = fundHelper.getArbMargin('MERGE', threshold, pxinfo)
+            splitArb   = fundHelper.getArbMargin('SPLIT', threshold, pxinfo)
+            if mergeArb:
+                arbitrageDFs.append(pd.DataFrame(mergeArb, index=[0]))
+            if splitArb: 
+                arbitrageDFs.append(pd.DataFrame(splitArb, index=[0]))
+        arbitrageTable = pd.concat(arbitrageDFs, axis=1)
+        arbitrageTable = arbitrageTable.sort(columns=["PriceMargin"],ascending=False)
+        summary = "\n" + arbitrageTable.to_string()
+        print summary
+        file = open(name=dumpFile,mode="a+")
+        file.write(summary)
+        file.close()
+        
     def scan(self, threshold=0.03, exchangeCommission=0.002, unwindRate=0.005, baseSubscription=0.015, dumpFile="H:\\HashiCorp\\Vagrant\\bin\\arbitrage_summary.txt"):
         now = datetime.datetime.now()
         arbitrageArray = []
