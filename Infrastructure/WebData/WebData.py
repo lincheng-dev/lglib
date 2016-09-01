@@ -44,7 +44,8 @@ def get_fund_quote_with_value(ticker="150033"):
             df['value_date'] = valdf['date']
     except Exception as e:
         print "get value failed with error %s ticker %s"%(str(e), ticker)
-        df = None
+        df['value']      = -999.0 # suggest failure in price
+        df['value_date'] = df['date']
     return df
     
 def wrapper(retry=5, timeout=3.0, interval=0.005):

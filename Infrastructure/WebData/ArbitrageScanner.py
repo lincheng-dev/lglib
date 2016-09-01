@@ -6,9 +6,7 @@ import time
 import numpy as np
 import sys
 import getopt
-import imp
-imp.load_source('StrucFundHelper', 'StrucFundHelper.py')
-import StrucFundHelper
+import StructuredFund.StrucFundHelper as StrucFundHelper
 
 class ArbitrageScanner:
     def __init__(self):
@@ -30,14 +28,21 @@ class ArbitrageScanner:
     def isZero(self, value):
         return np.isclose(value, 0.0, equal_nan=True)
     
-    def scan_detail(self, threshold=0.00, dumpFile="G:/Result/StrucFund/arb_list.txt"):
+    def scan_detail(self, threshold=0.00, dumpFilePrefix="J:/arb_list"):
+        print "Doing detailed scan for arbitrage"
+        StrucFundHelper.StrucFundHelperDict.reload()
+        StrucFundHelper.TxFeeHelper.reload()
         now = datetime.datetime.now()
         arbitrageDFs = []
         for aTicker in self.fundParam.index:
             bTicker = self.fundParam.loc[aTicker, "bTicker"]
             baseTicker = self.fundParam.loc[aTicker, "baseTicker"]
+            #print "processing %s %s %s" % (baseTicker, aTicker, bTicker)
             aWeight = self.fundParam.loc[aTicker, "aWeight"]
             bWeight = self.fundParam.loc[aTicker, "bWeight"]
+            tWeight = aWeight + bWeight
+            aWeight = aWeight / tWeight
+            bWeight = bWeight / tWeight
             infoDict = {'Ticker': baseTicker, 'ATicker': aTicker, 'BTicker': bTicker, 'AWeight': aWeight, 'BWeight': bWeight, 'UpFold': 0., 'DownFold': 0.}
             try:
                 aQuote = WebData.get_fund_quote_with_value(aTicker)
@@ -48,21 +53,28 @@ class ArbitrageScanner:
                 print "fail to load quote for (%s,%s,%s) with error %s, skip"%(aTicker,bTicker,baseTicker, str(e))
                 continue
             fundHelper = StrucFundHelper.StrucFundHelperDict.getHelperForTicker(**infoDict)
-            mergeArb   = fundHelper.getArbMargin('MERGE', threshold, pxinfo)
-            splitArb   = fundHelper.getArbMargin('SPLIT', threshold, pxinfo)
+            mergeArb   = fundHelper.getArbMargin('MERGE', pxinfo, threshold = threshold)
+            splitArb   = fundHelper.getArbMargin('SPLIT', pxinfo, threshold = threshold)
             if mergeArb:
-                arbitrageDFs.append(pd.DataFrame(mergeArb, index=[0]))
-            if splitArb: 
-                arbitrageDFs.append(pd.DataFrame(splitArb, index=[0]))
-        arbitrageTable = pd.concat(arbitrageDFs, axis=1)
-        arbitrageTable = arbitrageTable.sort(columns=["PriceMargin"],ascending=False)
-        summary = "\n" + arbitrageTable.to_string()
-        print summary
-        file = open(name=dumpFile,mode="a+")
-        file.write(summary)
-        file.close()
+                arbitrageDFs.append(pd.DataFrame(mergeArb, index=[now]))
+            if splitArb:
+                arbitrageDFs.append(pd.DataFrame(splitArb, index=[now]))
+        if len(arbitrageDFs) > 0:
+            arbitrageTable = pd.concat(arbitrageDFs)
+            arbitrageTable = arbitrageTable.sort(columns=["PriceMargin"],ascending=False)
+            summary = "\n" + arbitrageTable.to_string()
+            print summary
+            file = open(name=dumpFilePrefix+"_all.txt",mode="a+")
+            file.write(summary)
+            file.close()
+            file = open(name=dumpFilePrefix+"_latest.txt",mode="w")
+            file.write(arbitrageTable.to_string())
+            file.close()
         
-    def scan(self, threshold=0.03, exchangeCommission=0.002, unwindRate=0.005, baseSubscription=0.015, dumpFile="H:\\HashiCorp\\Vagrant\\bin\\arbitrage_summary.txt"):
+    def scan(self, mode="default", threshold=0.03, exchangeCommission=0.002, unwindRate=0.005, baseSubscription=0.015, dumpFile="H:\\HashiCorp\\Vagrant\\bin\\arbitrage_summary.txt"):
+        if mode=="detail":
+            self.scan_detail(threshold=threshold)
+            return
         now = datetime.datetime.now()
         arbitrageArray = []
         arbitrageIndices = []
@@ -97,14 +109,14 @@ class ArbitrageScanner:
         file.write(summary)
         file.close()
 
-def singleScan():
+def singleScan(mode="default"):
     scanner = ArbitrageScanner()
-    scanner.scan()
+    scanner.scan(mode)
 
-def repeatedScan(scan_interval=900):
+def repeatedScan(scan_interval=900, mode="default"):
     while True:
         scanner = ArbitrageScanner()
-        scanner.scan()
+        scanner.scan(mode)
         time.sleep(scan_interval)
 
 def main():

@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import datetime
 from numpy import floor, abs
+import pandas
 
 def NotExchFund(ticker):
     return ticker.startswith('16')
@@ -9,8 +10,10 @@ def NotExchFund(ticker):
 def getQuoteAmount(side, num, pxinfo):
     totalAmt = 0
     for i in xrange(1, num+1):
-        name = side + str(i) + '_v'
-        totalAmt += pxinfo.get(name, [0])[0]*100
+        name   = side + str(i) + '_v'
+        curAmt = pxinfo.get(name, [0])[0]
+        if not pandas.isnull(curAmt):
+            totalAmt += curAmt * 100
     return totalAmt
     
 def getQuoteAvg(side, num, pxinfo, amount):
@@ -24,13 +27,14 @@ def getQuoteAvg(side, num, pxinfo, amount):
         name2  = side + str(i) + '_p'
         curAmt = pxinfo.get(name1, [0.])[0]*100
         curPx  = pxinfo.get(name2, [-999.])[0]
-        if curAmt + accuAmt <= amount:
-            accuPx  += curAmt * curPx
-            accuAmt += curAmt
-        else:
-            accuPx  += (amount - accuAmt) * curPx
-            accuAmt  = amount
-            break
+        if not pandas.isnull(curAmt) and not pandas.isnull(curPx):
+            if curAmt + accuAmt <= amount:
+                accuPx  += curAmt * curPx
+                accuAmt += curAmt
+            else:
+                accuPx  += (amount - accuAmt) * curPx
+                accuAmt  = amount
+                break
     return accuPx / accuAmt
 
 BUYFEEEXCEPTOTC  = {}
@@ -49,11 +53,11 @@ class TxFeeHelper(object):
     def getFee(cls, type, *args, **kwargs):
         ticker = kwargs.get('Ticker', None)
         assert ticker != None, "Invalid ticker info in HelperDict.getHelperForTicker."
-        if (type, ticker) in feeList:
-            return feeList[(type, ticker)]
+        if (type, ticker) in cls.feeList:
+            return cls.feeList[(type, ticker)]
         else:
             fee = cls.calcFee(type, *args, **kwargs)
-            feeList[(type, ticker)] = fee 
+            cls.feeList[(type, ticker)] = fee 
             return fee
     
     @classmethod
@@ -61,10 +65,10 @@ class TxFeeHelper(object):
         Ticker  = kwargs['Ticker']
         ATicker = kwargs['ATicker']
         BTicker = kwargs['BTicker']
-        return cls.__getattr__('calcFee'+type.upper())(Ticker, ATicker, BTicker)
+        return getattr(cls, 'calcFee'+type.upper())(Ticker, ATicker, BTicker)
         
     @classmethod
-    def calcFeeSplit(cls, Ticker, ATicker, BTicker):
+    def calcFeeSPLIT(cls, Ticker, ATicker, BTicker):
         buyFee    = BUYFEEEXCEPT.get(Ticker, ExchTxFee)
         buyFeeOTC = BUYFEEEXCEPTOTC.get(Ticker, OTCFundBuy)
         sellFeeA  = SELLFEEEXCEPT.get(ATicker, ExchTxFee)
@@ -74,7 +78,7 @@ class TxFeeHelper(object):
         return (buyFee, buyFeeOTC, sellFeeA, sellFeeB)
 
     @classmethod
-    def calcFeeMerge(cls, Ticker, ATicker, BTicker):
+    def calcFeeMERGE(cls, Ticker, ATicker, BTicker):
         buyFeeA    = BUYFEEEXCEPT.get(ATicker, ExchTxFee)
         buyFeeB    = BUYFEEEXCEPT.get(BTicker, ExchTxFee)
         sellFee    = SELLFEEEXCEPT.get(Ticker, ExchTxFee)
@@ -108,7 +112,6 @@ class StrucFundHelperDict(object):
 class StrucFundHelper(object):
     
     def __init__(self, *args, **kwargs):
-        print kwargs
         self.info             = {}
         self.info['Ticker']   = kwargs['Ticker']
         self.info['ATicker']  = kwargs['ATicker']
@@ -118,13 +121,22 @@ class StrucFundHelper(object):
         self.info['UpFold']   = kwargs['UpFold']
         self.info['DownFold'] = kwargs['DownFold']
     
-    def validPxInfo(self, pxinfo):
+    def validPxInfo(self, postype, pxinfo):
         baseInfo = pxinfo[self.info['Ticker']]
         AInfo    = pxinfo[self.info['ATicker']]
         BInfo    = pxinfo[self.info['BTicker']]
         today    = datetime.date.today()
-        if baseInfo['price'][0] < 0.01 or AInfo['price'][0] < 0.01 or BInfo['price'][0] < 0.01:
-            print "price invalid %s, %s, %s" % (self.info['Ticker'], self.info['ATicker'], self.info['BTicker'])
+        if baseInfo is None:
+            print "get %s price and value failed" % self.info['Ticker']
+        if AInfo is None:
+            print "get %s price and value failed" % self.info['ATicker']
+        if BInfo is None:
+            print "get %s price and value failed" % self.info['BTicker']
+        if postype == 'MERGE' and (baseInfo['b1_p'][0] < 0.01 or AInfo['a1_p'][0] < 0.01 or BInfo['a1_p'][0] < 0.01):
+            print "merge price invalid %s, %s, %s" % (self.info['Ticker'], self.info['ATicker'], self.info['BTicker'])
+            return False
+        if postype == 'SPLIT' and (baseInfo['a1_p'][0] < 0.01 or AInfo['b1_p'][0] < 0.01 or BInfo['b1_p'][0] < 0.01):
+            print "split price invalid %s, %s, %s" % (self.info['Ticker'], self.info['ATicker'], self.info['BTicker'])
             return False
         if baseInfo['date'][0].date() < today or baseInfo['value_date'][0].date() < today:
             print "base price date invalid %s" % (self.info['Ticker'])
@@ -137,13 +149,13 @@ class StrucFundHelper(object):
             return False
         return True
         
-    def getArbMargin(self, type, pxinfo, threshold=0.0):
-        if not self.validPxInfo(pxinfo):
+    def getArbMargin(self, postype, pxinfo, threshold=0.0):
+        if not self.validPxInfo(postype.upper(), pxinfo):
             return None
-        if type.upper() == 'SPLIT':
-            return self.getArbMarginSplit(pxinfo, threshold=threshold).update(self.info)
-        elif type.upper() == 'MERGE':
-            return self.getArbMarginMerge(pxinfo, threshold=threshold).update(self.info)
+        if postype.upper() == 'SPLIT':
+            return self.getArbMarginSplit(pxinfo, threshold=threshold)
+        elif postype.upper() == 'MERGE':
+            return self.getArbMarginMerge(pxinfo, threshold=threshold)
         else:
             raise NotImplementedError
     
@@ -157,14 +169,14 @@ class StrucFundHelper(object):
         APrice    = AInfo['b1_p'][0]
         BPrice    = BInfo['b1_p'][0]
         basePrice = baseInfo['a1_p'][0]
-        AValue    = APx['value'][0]
-        BValue    = BPx['value'][0]
-        baseValue = basePx['value'][0]
+        AValue    = AInfo['value'][0]
+        BValue    = BInfo['value'][0]
+        baseValue = baseInfo['value'][0]
         
         # calculate margin
         buyPrice  = (1.0 + baseBuyFee) * basePrice
         buyValue  = (1.0 + baseBuyFeeOTC) * baseValue
-        sellPrice = (1.0 + ASellFee) * APrice * self.info['AWeight'] + (1.0 + BSellFee) * BPrice * self.info['BWeight']
+        sellPrice = (1.0 - ASellFee) * APrice * self.info['AWeight'] + (1.0 - BSellFee) * BPrice * self.info['BWeight']
         pxMargin  = sellPrice / buyPrice - 1.0
         valMargin = sellPrice / buyValue - 1.0
         
@@ -175,6 +187,7 @@ class StrucFundHelper(object):
         else:
             # if chance, check more details on amount and bid-ask spread
             outdict    = {}
+            outdict.update(self.info)
             AAmount    = getQuoteAmount('b', 1, AInfo) / self.info['AWeight']
             BAmount    = getQuoteAmount('b', 1, BInfo) / self.info['BWeight']
             baseAmt    = getQuoteAmount('a', 1, baseInfo)
@@ -191,8 +204,8 @@ class StrucFundHelper(object):
             APxVaL5    = getQuoteAvg('b', 5, AInfo, valAmtL5 * self.info['AWeight'])
             BPxVaL5    = getQuoteAvg('b', 5, BInfo, valAmtL5 * self.info['BWeight'])
             basePxVaL5 = baseValue
-            maxPxMargin = ((1.0 + ASellFee) * APxPxL5 * self.info['AWeight'] + (1.0 + BSellFee) * BPxPxL5 * self.info['BWeight']) / ((1.0 + baseBuyFee) * basePxPxL5) - 1.0
-            maxVaMargin = ((1.0 + ASellFee) * APxVaL5 * self.info['AWeight'] + (1.0 + BSellFee) * BPxVaL5 * self.info['BWeight']) / ((1.0 + baseBuyFeeOTC) * basePxVaL5) - 1.0
+            maxPxMargin = ((1.0 - ASellFee) * APxPxL5 * self.info['AWeight'] + (1.0 - BSellFee) * BPxPxL5 * self.info['BWeight']) / ((1.0 + baseBuyFee) * basePxPxL5) - 1.0
+            maxVaMargin = ((1.0 - ASellFee) * APxVaL5 * self.info['AWeight'] + (1.0 - BSellFee) * BPxVaL5 * self.info['BWeight']) / ((1.0 + baseBuyFeeOTC) * basePxVaL5) - 1.0
             outdict['Type']        = 'SPLIT'
             outdict['BaseFee']     = baseBuyFee
             outdict['BaseFeeOTC']  = baseBuyFeeOTC
@@ -205,7 +218,7 @@ class StrucFundHelper(object):
             outdict['BPrice']      = BPrice
             outdict['BaseValue']   = baseValue
             outdict['AValue']      = AValue
-            outdict['BValue']      = AValue
+            outdict['BValue']      = BValue
             outdict['PriceAmt']    = pxAmount 
             outdict['ValueAmt']    = valAmount
             outdict['MaxPxAmt']    = pxAmtL5
@@ -218,6 +231,7 @@ class StrucFundHelper(object):
             outdict['MaxAVaPx']    = APxVaL5
             outdict['MaxBVaPx']    = BPxVaL5
             outdict['MaxBaseVaPx'] = basePxVaL5
+            return outdict
             
     def getArbMarginMerge(self, pxinfo, threshold=0.0):
         baseSellFee, baseSellFeeOTC, ABuyFee, BBuyFee = TxFeeHelper.getFee(type='MERGE', **self.info)
@@ -229,14 +243,14 @@ class StrucFundHelper(object):
         APrice    = AInfo['a1_p'][0]
         BPrice    = BInfo['a1_p'][0]
         basePrice = baseInfo['b1_p'][0]
-        AValue    = APx['value'][0]
-        BValue    = BPx['value'][0]
-        baseValue = basePx['value'][0]
+        AValue    = AInfo['value'][0]
+        BValue    = BInfo['value'][0]
+        baseValue = baseInfo['value'][0]
         
         # calculate margin
         buyPrice  = (1.0 + ABuyFee) * APrice * self.info['AWeight'] + (1.0 + BBuyFee) * BPrice * self.info['BWeight']
-        sellPrice = (1.0 + baseSellFee) * basePrice
-        sellValue = (1.0 + baseSellFeeOTC) * baseValue
+        sellPrice = (1.0 - baseSellFee) * basePrice
+        sellValue = (1.0 - baseSellFeeOTC) * baseValue
         pxMargin  = sellPrice / buyPrice - 1.0
         valMargin = sellValue / buyPrice - 1.0
         
@@ -247,6 +261,7 @@ class StrucFundHelper(object):
         else:
             # if chance, check more details on amount and bid-ask spread
             outdict    = {}
+            outdict.update(self.info)
             AAmount    = getQuoteAmount('a', 1, AInfo) / self.info['AWeight']
             BAmount    = getQuoteAmount('a', 1, BInfo) / self.info['BWeight']
             baseAmt    = getQuoteAmount('b', 1, baseInfo)
@@ -263,8 +278,8 @@ class StrucFundHelper(object):
             APxVaL5    = getQuoteAvg('a', 5, AInfo, valAmtL5 * self.info['AWeight'])
             BPxVaL5    = getQuoteAvg('a', 5, BInfo, valAmtL5 * self.info['BWeight'])
             basePxVaL5 = baseValue
-            maxPxMargin = ((1.0 + baseSellFee) * basePxPxL5) / ((1.0 + ABuyFee) * APxPxL5 * self.info['AWeight'] + (1.0 + BBuyFee) * BPxPxL5 * self.info['BWeight']) /  - 1.0
-            maxVaMargin = ((1.0 + baseSellFeeOTC) * basePxVaL5) / ((1.0 + ABuyFee) * APxVaL5 * self.info['AWeight'] + (1.0 + BBuyFee) * BPxVaL5 * self.info['BWeight'])  - 1.0
+            maxPxMargin = ((1.0 - baseSellFee) * basePxPxL5) / ((1.0 + ABuyFee) * APxPxL5 * self.info['AWeight'] + (1.0 + BBuyFee) * BPxPxL5 * self.info['BWeight']) - 1.0
+            maxVaMargin = ((1.0 - baseSellFeeOTC) * basePxVaL5) / ((1.0 + ABuyFee) * APxVaL5 * self.info['AWeight'] + (1.0 + BBuyFee) * BPxVaL5 * self.info['BWeight'])  - 1.0
             outdict['Type']        = 'MERGE'
             outdict['BaseFee']     = baseSellFee
             outdict['BaseFeeOTC']  = baseSellFeeOTC
@@ -277,7 +292,7 @@ class StrucFundHelper(object):
             outdict['BPrice']      = BPrice
             outdict['BaseValue']   = baseValue
             outdict['AValue']      = AValue
-            outdict['BValue']      = AValue
+            outdict['BValue']      = BValue
             outdict['PriceAmt']    = pxAmount 
             outdict['ValueAmt']    = valAmount
             outdict['MaxPxAmt']    = pxAmtL5
@@ -290,4 +305,5 @@ class StrucFundHelper(object):
             outdict['MaxAVaPx']    = APxVaL5
             outdict['MaxBVaPx']    = BPxVaL5
             outdict['MaxBaseVaPx'] = basePxVaL5
+            return outdict
     
