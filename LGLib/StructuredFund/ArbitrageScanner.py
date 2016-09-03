@@ -84,7 +84,7 @@ class ArbitrageScanner:
             arbitrageTable = pd.concat(arbitrageDFs)
             arbitrageTable = arbitrageTable.sort_values(by=["PriceMargin"],ascending=False)
             arbiHTML       = StrucFundHelper.createHTML(arbitrageTable)
-            arbiTitle      = "%s arbitrage scane with threshold %s" % (now.strftime("%Y%m%d"), str(threshold).replace('.',''))
+            arbiTitle      = "%s arbitrage scan with threshold %s" % (now.strftime("%Y%m%d"), str(threshold).replace('.',''))
             send_mail(["gonglch@gmail.com"], arbiTitle, arbiHTML, "Structured Fund Scan")
             summary = "\n" + arbitrageTable.to_string()
             file = open(name=os.path.join(self.dumpPath, "%s_detailscan_threshold_%s.txt" % (now.strftime("%Y%m%d"), str(threshold).replace('.',''))), mode="a+")

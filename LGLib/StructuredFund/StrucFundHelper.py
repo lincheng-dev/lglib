@@ -18,13 +18,21 @@ def createHTML(df=pandas.DataFrame()):
                [currow[1]['BTicker'], currow[1]['BPrice'], currow[1]['BValue'], currow[1]['MaxBPrice'], currow[1]['MaxBVaPx'], currow[1]['BFee'], currow[1]['BWeight'], '', '']]
         for i in xrange(len(lol)):
             for j in xrange(len(lol[i])):
-                lol[i][j] = str(lol[i][j])
-        strHTML += '<table>\n'
+                if type(lol[i][j]) is float:
+                    if abs(lol[i][j]) < 0.1:
+                        lol[i][j] = "%.3f%%" % lol[i][j]
+                    elif abs(lol[i][j]) < 10.:
+                        lol[i][j] = "%8.4f" % lol[i][j]
+                    else:
+                        lol[i][j] = "%d" % lol[i][j]
+                else:
+                    lol[i][j] = str(lol[i][j])
+        strHTML += '<table border=\"1\">'
         for sublist in lol:
-            strHTML += '  <tr><td>\n'
+            strHTML += '  <tr><td>'
             strHTML += '    </td><td>'.join(sublist)
             strHTML += '  </td><tr>'
-        strHTML += '</table>'
+        strHTML += '</table><p></p>'
     return strHTML
             
 def NotExchFund(ticker):
