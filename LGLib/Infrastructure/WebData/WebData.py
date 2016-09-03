@@ -8,9 +8,8 @@ import datetime, time
 from pandas import DataFrame
 from lxml import etree
 import tushare as ts
-import time
 import socket
-import copy
+import logging
 # historical url
 _HISTORICAL_HEXUN_URL  = 'http://data.funds.hexun.com/outxml/detail/openfundnetvalue.aspx?'
 _HISTORICAL_GOOGLE_URL = 'http://www.google.com/finance/historical?'
@@ -19,7 +18,7 @@ _HISTORICAL_163_URL    = 'http://quotes.money.163.com/fund/'
 def NotExchFund(ticker):
     return ticker.startswith('16')
     
-def get_fund_quote_with_value(ticker="150033"):
+def get_fund_quote_with_value(ticker="150033", useLogging=False):
     ''' a unified interface to get real time quote with value '''
     df = None
     try:
@@ -34,7 +33,10 @@ def get_fund_quote_with_value(ticker="150033"):
         else:
             df = get_fund_quote_ts(ticker)
     except Exception as e:
-        print "get quote failed with error %s ticker %s"%(str(e), ticker)
+        if useLogging:
+            logging.warning("get quote failed with error %s ticker %s"%(str(e), ticker))
+        else:
+            print "get quote failed with error %s ticker %s"%(str(e), ticker)
         df = None
         
     try:
@@ -43,7 +45,10 @@ def get_fund_quote_with_value(ticker="150033"):
             df['value']      = valdf['price']
             df['value_date'] = valdf['date']
     except Exception as e:
-        print "get value failed with error %s ticker %s"%(str(e), ticker)
+        if useLogging:
+            logging.warning("get value failed with error %s ticker %s"%(str(e), ticker))
+        else:
+            print "get value failed with error %s ticker %s"%(str(e), ticker)
         df['value']      = -999.0 # suggest failure in price
         df['value_date'] = df['date']
     return df
@@ -59,7 +64,8 @@ def wrapper(retry=5, timeout=3.0, interval=0.005):
                 try:
                     df = func(*args, **kwargs)
                 except Exception as e:
-                    print "call %s failed with error %s"%(func.__name__, str(e))
+                    #print "call %s failed with error %s"%(func.__name__, str(e))
+                    logging.warning("call %s failed with error %s"%(func.__name__, str(e)))
                 if not (df is None or df.empty):
                     break
                 time.sleep(interval)

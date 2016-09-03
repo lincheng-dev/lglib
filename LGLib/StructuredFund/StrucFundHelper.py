@@ -3,6 +3,7 @@
 import datetime
 from numpy import floor, abs
 import pandas
+import logging
 
 def NotExchFund(ticker):
     return ticker.startswith('16')
@@ -127,25 +128,25 @@ class StrucFundHelper(object):
         BInfo    = pxinfo[self.info['BTicker']]
         today    = datetime.date.today()
         if baseInfo is None:
-            print "get %s price and value failed" % self.info['Ticker']
+            logging.warning("get %s price and value failed" % self.info['Ticker'])
         if AInfo is None:
-            print "get %s price and value failed" % self.info['ATicker']
+            logging.warning("get %s price and value failed" % self.info['ATicker'])
         if BInfo is None:
-            print "get %s price and value failed" % self.info['BTicker']
+            logging.warning("get %s price and value failed" % self.info['BTicker'])
         if postype == 'MERGE' and (baseInfo['b1_p'][0] < 0.01 or AInfo['a1_p'][0] < 0.01 or BInfo['a1_p'][0] < 0.01):
-            print "merge price invalid %s, %s, %s" % (self.info['Ticker'], self.info['ATicker'], self.info['BTicker'])
+            logging.warning("merge price invalid %s, %s, %s" % (self.info['Ticker'], self.info['ATicker'], self.info['BTicker']))
             return False
         if postype == 'SPLIT' and (baseInfo['a1_p'][0] < 0.01 or AInfo['b1_p'][0] < 0.01 or BInfo['b1_p'][0] < 0.01):
-            print "split price invalid %s, %s, %s" % (self.info['Ticker'], self.info['ATicker'], self.info['BTicker'])
+            logging.warning("split price invalid %s, %s, %s" % (self.info['Ticker'], self.info['ATicker'], self.info['BTicker']))
             return False
         if baseInfo['date'][0].date() < today or baseInfo['value_date'][0].date() < today:
-            print "base price date invalid %s" % (self.info['Ticker'])
+            logging.warning("base price date invalid %s" % (self.info['Ticker']))
             return False
         if AInfo['date'][0].date() < today or AInfo['value_date'][0].date() < today:
-            print "A price date invalid %s" % (self.info['ATicker'])
+            logging.warning("A price date invalid %s" % (self.info['ATicker']))
             return False
         if BInfo['date'][0].date() < today or BInfo['value_date'][0].date() < today:
-            print "B price date invalid %s" % (self.info['BTicker'])
+            logging.warning("B price date invalid %s" % (self.info['BTicker']))
             return False
         return True
         
