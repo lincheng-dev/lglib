@@ -20,7 +20,7 @@ def createHTML(df=pandas.DataFrame()):
             for j in xrange(len(lol[i])):
                 if type(lol[i][j]) is float:
                     if abs(lol[i][j]) < 0.1:
-                        lol[i][j] = "%.3f%%" % lol[i][j]
+                        lol[i][j] = "%.3f%%" % (lol[i][j] * 100.)
                     elif abs(lol[i][j]) < 10.:
                         lol[i][j] = "%8.4f" % lol[i][j]
                     else:
