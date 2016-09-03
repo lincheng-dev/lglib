@@ -5,6 +5,28 @@ from numpy import floor, abs
 import pandas
 import logging
 
+def createHTML(df=pandas.DataFrame()):
+    strHTML = ''
+    for currow in df.iterrows():
+        lol = [['Type', 'Margin of Price', 'Margin of Value', 'Volumn of Price', 'Volumn of Value', 'MoP Max', 'MoV Max', 'VoP Max', 'VoV Max'],
+               [currow[1]['Type'], currow[1]['PriceMargin'], currow[1]['ValueMargin'], currow[1]['PriceAmt'], currow[1]['ValueAmt'], currow[1]['MaxPxMargin'], currow[1]['MaxVaMargin'], currow[1]['MaxPxAmt'], currow[1]['MaxVaAmt']],
+               ['Base Ticker', 'Base Price', 'Base Value', 'Base Price MaxP', 'Base Price MaxV', 'Base Fee', 'Base Fee OTC', '', ''],
+               [currow[1]['Ticker'], currow[1]['BasePrice'], currow[1]['BaseValue'], currow[1]['MaxBasePx'], currow[1]['MaxBaseVaPx'], currow[1]['BaseFee'], currow[1]['BaseFeeOTC'], '', ''],
+               ['A Ticker', 'A Price', 'A Value', 'A Price MaxP', 'A Price MaxV', 'A Fee', 'A Weight', '', ''],
+               [currow[1]['ATicker'], currow[1]['APrice'], currow[1]['AValue'], currow[1]['MaxAPrice'], currow[1]['MaxAVaPx'], currow[1]['AFee'], currow[1]['AWeight'], '', ''],
+               ['B Ticker', 'B Price', 'B Value', 'B Price MaxP', 'B Price MaxV', 'B Fee', 'B Weight', '', ''],
+               [currow[1]['BTicker'], currow[1]['BPrice'], currow[1]['BValue'], currow[1]['MaxBPrice'], currow[1]['MaxBVaPx'], currow[1]['BFee'], currow[1]['BWeight'], '', '']]
+        for i in xrange(len(lol)):
+            for j in xrange(len(lol[i])):
+                lol[i][j] = str(lol[i][j])
+        strHTML += '<table>\n'
+        for sublist in lol:
+            strHTML += '  <tr><td>\n'
+            strHTML += '    </td><td>'.join(sublist)
+            strHTML += '  </td><tr>'
+        strHTML += '</table>'
+    return strHTML
+            
 def NotExchFund(ticker):
     return ticker.startswith('16')
     
@@ -141,13 +163,13 @@ class StrucFundHelper(object):
             return False
         if baseInfo['date'][0].date() < today or baseInfo['value_date'][0].date() < today:
             logging.warning("base price date invalid %s" % (self.info['Ticker']))
-            return False
+            #return False
         if AInfo['date'][0].date() < today or AInfo['value_date'][0].date() < today:
             logging.warning("A price date invalid %s" % (self.info['ATicker']))
-            return False
+            #return False
         if BInfo['date'][0].date() < today or BInfo['value_date'][0].date() < today:
             logging.warning("B price date invalid %s" % (self.info['BTicker']))
-            return False
+            #return False
         return True
         
     def getArbMargin(self, postype, pxinfo, threshold=0.0):

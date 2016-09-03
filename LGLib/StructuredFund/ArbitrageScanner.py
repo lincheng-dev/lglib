@@ -7,6 +7,7 @@ import logging
 import LGLib
 import LGLib.Infrastructure.WebData.WebData as WebData
 from LGLib.Infrastructure.BobJob.JobScheduler import JobScheduler
+from LGLib.Infrastructure.BobJob.PublicEmail import send_mail
 from LGLib.Configure.BobJob.StructuredFund.StructuredFundConfig import STRUCFUND_JOB_CONFIG
 import StrucFundHelper
 
@@ -82,6 +83,9 @@ class ArbitrageScanner:
         if len(arbitrageDFs) > 0:
             arbitrageTable = pd.concat(arbitrageDFs)
             arbitrageTable = arbitrageTable.sort_values(by=["PriceMargin"],ascending=False)
+            arbiHTML       = StrucFundHelper.createHTML(arbitrageTable)
+            arbiTitle      = "%s arbitrage scane with threshold %s" % (now.strftime("%Y%m%d"), str(threshold).replace('.',''))
+            send_mail(["gonglch@gmail.com"], arbiTitle, arbiHTML, "Structured Fund Scan")
             summary = "\n" + arbitrageTable.to_string()
             file = open(name=os.path.join(self.dumpPath, "%s_detailscan_threshold_%s.txt" % (now.strftime("%Y%m%d"), str(threshold).replace('.',''))), mode="a+")
             file.write(summary)
@@ -89,7 +93,7 @@ class ArbitrageScanner:
             file = open(name=os.path.join(self.dumpPath, "detailscan_threshold_%s_latest.txt" % str(threshold).replace('.','')), mode="w")
             file.write(arbitrageTable.to_string())
             file.close()
-        
+    
     def scan(self, *args, **kwargs):
         mode               = kwargs['mode']
         threshold          = kwargs['threshold']
