@@ -171,13 +171,13 @@ class StrucFundHelper(object):
             return False
         if baseInfo['date'][0].date() < today or baseInfo['value_date'][0].date() < today:
             logging.warning("base price date invalid %s" % (self.info['Ticker']))
-            #return False
+            return False
         if AInfo['date'][0].date() < today or AInfo['value_date'][0].date() < today:
             logging.warning("A price date invalid %s" % (self.info['ATicker']))
-            #return False
+            return False
         if BInfo['date'][0].date() < today or BInfo['value_date'][0].date() < today:
             logging.warning("B price date invalid %s" % (self.info['BTicker']))
-            #return False
+            return False
         return True
         
     def getArbMargin(self, postype, pxinfo, threshold=0.0):

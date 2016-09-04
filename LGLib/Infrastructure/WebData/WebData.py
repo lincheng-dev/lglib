@@ -37,7 +37,8 @@ def get_fund_quote_with_value(ticker="150033", useLogging=False):
             logging.warning("get quote failed with error %s ticker %s"%(str(e), ticker))
         else:
             print "get quote failed with error %s ticker %s"%(str(e), ticker)
-        df = None
+        # if price not avaialbe return none
+        return None
         
     try:
         if not NotExchFund(ticker):

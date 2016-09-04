@@ -6,8 +6,8 @@ libpath = os.path.dirname(os.path.realpath(__file__))
 outpath = os.path.dirname(os.path.realpath('LGLib'))
 STRUCFUND_JOB_CONFIG = {
 'SCHEMODE'     : 'QUARTERHOUR',
-'REPEAT'       : 5,
-'threshold'    : -0.003,
+'REPEAT'       : 40,
+'threshold'    : -0.001,
 'mode'         : 'DETAIL',
 'dumpPath'     : os.path.join(outpath, 'Results', 'StructuredFund'),
 'fundInfoFile' : os.path.join(libpath, 'fundInfo.csv')
