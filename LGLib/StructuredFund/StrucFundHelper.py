@@ -227,8 +227,8 @@ class StrucFundHelper(object):
             AAmountL5  = getQuoteAmount('b', 5, AInfo) / self.info['AWeight']
             BAmountL5  = getQuoteAmount('b', 5, BInfo) / self.info['BWeight']
             baseAmtL5  = getQuoteAmount('a', 5, baseInfo)
-            valAmtL5   = min([50000, AAmountL5, BAmountL5])
-            pxAmtL5    = min([valAmtL5, baseAmtL5])
+            valAmtL5   = floor(min([50000, AAmountL5, BAmountL5]))
+            pxAmtL5    = floor(min([valAmtL5, baseAmtL5]))
             APxPxL5    = getQuoteAvg('b', 5, AInfo, pxAmtL5 * self.info['AWeight'])
             BPxPxL5    = getQuoteAvg('b', 5, BInfo, pxAmtL5 * self.info['BWeight'])
             basePxPxL5 = getQuoteAvg('a', 5, baseInfo, pxAmtL5)
@@ -301,8 +301,8 @@ class StrucFundHelper(object):
             AAmountL5  = getQuoteAmount('a', 5, AInfo) / self.info['AWeight']
             BAmountL5  = getQuoteAmount('a', 5, BInfo) / self.info['BWeight']
             baseAmtL5  = getQuoteAmount('b', 5, baseInfo)
-            valAmtL5   = min([50000, AAmountL5, BAmountL5])
-            pxAmtL5    = min([valAmtL5, baseAmtL5])
+            valAmtL5   = floor(min([50000, AAmountL5, BAmountL5]))
+            pxAmtL5    = floor(min([valAmtL5, baseAmtL5]))
             APxPxL5    = getQuoteAvg('a', 5, AInfo, pxAmtL5 * self.info['AWeight'])
             BPxPxL5    = getQuoteAvg('a', 5, BInfo, pxAmtL5 * self.info['BWeight'])
             basePxPxL5 = getQuoteAvg('b', 5, baseInfo, pxAmtL5)

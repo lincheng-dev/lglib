@@ -55,7 +55,8 @@ class ArbitrageScanner:
         now = datetime.datetime.now()
         print "\nDoing detailed scan for arbitrage"
         logging.info("Doing detailed scan for arbitrage at %s" % str(now))
-        arbitrageDFs = []
+        arbitrageDFs     = []
+        arbitrageDFsFull = []
         for aTicker in self.fundParam.index:
             bTicker = self.fundParam.loc[aTicker, "bTicker"]
             baseTicker = self.fundParam.loc[aTicker, "baseTicker"]
@@ -80,6 +81,18 @@ class ArbitrageScanner:
                 arbitrageDFs.append(pd.DataFrame(mergeArb, index=[now]))
             if splitArb:
                 arbitrageDFs.append(pd.DataFrame(splitArb, index=[now]))
+            mergeArbFu = fundHelper.getArbMargin('MERGE', pxinfo, threshold = -999.)
+            splitArbFu = fundHelper.getArbMargin('SPLIT', pxinfo, threshold = -999.)
+            if mergeArbFu:
+                arbitrageDFsFull.append(pd.DataFrame(mergeArbFu, index=[now]))
+            if splitArbFu:
+                arbitrageDFsFull.append(pd.DataFrame(splitArbFu, index=[now]))
+        if len(arbitrageDFsFull) > 0.:
+            arbitrageTableFull = pd.concat(arbitrageDFsFull)
+            arbitrageTableFull = arbitrageTableFull.sort_values(by=["PriceMargin"],ascending=False)
+            file = open(name=os.path.join(self.dumpPath, "detailscan_threshold_%s_full_latest.txt" % str(threshold).replace('.','')), mode="w")
+            file.write(arbitrageTableFull.to_string())
+            file.close()
         if len(arbitrageDFs) > 0:
             arbitrageTable = pd.concat(arbitrageDFs)
             arbitrageTable = arbitrageTable.sort_values(by=["PriceMargin"],ascending=False)
