@@ -3,7 +3,7 @@
 import os
 import LGLib
 libpath = os.path.dirname(os.path.realpath(__file__))
-outpath = os.path.dirname(os.path.realpath('LGLib'))
+outpath = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(libpath))))
 STRUCFUND_JOB_CONFIG = {
 'SCHEMODE'     : 'QUARTERHOUR',
 'REPEAT'       : 36,

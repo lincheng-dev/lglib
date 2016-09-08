@@ -163,12 +163,40 @@ class StrucFundHelper(object):
             logging.warning("get %s price and value failed" % self.info['ATicker'])
         if BInfo is None:
             logging.warning("get %s price and value failed" % self.info['BTicker'])
-        if postype == 'MERGE' and (baseInfo['b1_p'][0] < 0.01 or AInfo['a1_p'][0] < 0.01 or BInfo['a1_p'][0] < 0.01):
-            logging.warning("merge price invalid %s, %s, %s" % (self.info['Ticker'], self.info['ATicker'], self.info['BTicker']))
-            return False
-        if postype == 'SPLIT' and (baseInfo['a1_p'][0] < 0.01 or AInfo['b1_p'][0] < 0.01 or BInfo['b1_p'][0] < 0.01):
-            logging.warning("split price invalid %s, %s, %s" % (self.info['Ticker'], self.info['ATicker'], self.info['BTicker']))
-            return False
+        if postype == 'MERGE': 
+            try: 
+                if baseInfo['b1_p'][0] < 0.01:
+                    logging.warning("merge price invalid %s, %s" % (self.info['Ticker'], str(baseInfo['b1_p'][0])))
+                    return False
+                elif AInfo['a1_p'][0] < 0.01:
+                    logging.warning("merge price invalid %s, %s" % (self.info['ATicker'], str(AInfo['a1_p'][0])))
+                    return False
+                elif BInfo['a1_p'][0] < 0.01:
+                    logging.warning("merge price invalid %s, %s" % (self.info['BTicker'], str(BInfo['a1_p'][0])))
+                    return False
+            except:
+                logging.warning("critical merge price invalid %s, %s, %s" % (self.info['Ticker'], self.info['ATicker'], self.info['BTicker']))
+                logging.warning(baseInfo.to_string())
+                logging.warning(AInfo.to_string())
+                logging.warning(BInfo.to_string())
+                return False
+        if postype == 'SPLIT':
+            try: 
+                if baseInfo['a1_p'][0] < 0.01:
+                    logging.warning("merge price invalid %s, %s" % (self.info['Ticker'], str(baseInfo['a1_p'][0])))
+                    return False
+                elif AInfo['b1_p'][0] < 0.01:
+                    logging.warning("merge price invalid %s, %s" % (self.info['ATicker'], str(AInfo['b1_p'][0])))
+                    return False
+                elif BInfo['b1_p'][0] < 0.01:
+                    logging.warning("merge price invalid %s, %s" % (self.info['BTicker'], str(BInfo['b1_p'][0])))
+                    return False
+            except:
+                logging.warning("critical merge price invalid %s, %s, %s" % (self.info['Ticker'], self.info['ATicker'], self.info['BTicker']))
+                logging.warning(baseInfo.to_string())
+                logging.warning(AInfo.to_string())
+                logging.warning(BInfo.to_string())            
+                return False
         if baseInfo['date'][0].date() < today or baseInfo['value_date'][0].date() < today:
             logging.warning("base price date invalid %s" % (self.info['Ticker']))
             return False
